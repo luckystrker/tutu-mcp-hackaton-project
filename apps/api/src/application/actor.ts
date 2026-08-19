@@ -16,7 +16,17 @@ export function actorFromHeaders(
       "Temporary test identity is required",
     );
   const rawName = headers["x-user-name"];
+  const encodedName = (Array.isArray(rawName) ? rawName[0] : rawName)?.trim();
   const displayName =
-    (Array.isArray(rawName) ? rawName[0] : rawName)?.trim() || "Test user";
+    decodeDisplayName(encodedName) || "Test user";
   return { userId: parsed.data, displayName: displayName.slice(0, 200) };
+}
+
+function decodeDisplayName(value: string | undefined): string {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

@@ -127,7 +127,7 @@ export class HttpRendezvousApi implements RendezvousApi {
           {
             headers: {
               "x-user-id": this.identity.id,
-              "x-user-name": this.identity.name,
+              "x-user-name": encodeURIComponent(this.identity.name),
             },
             signal,
           },
@@ -177,7 +177,7 @@ export class HttpRendezvousApi implements RendezvousApi {
       headers: {
         "content-type": "application/json",
         "x-user-id": this.identity.id,
-        "x-user-name": this.identity.name,
+        "x-user-name": encodeURIComponent(this.identity.name),
         ...init.headers,
       },
     });

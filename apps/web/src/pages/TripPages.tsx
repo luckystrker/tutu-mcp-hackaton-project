@@ -5,6 +5,7 @@ import {
   type TripPublic,
   type TransportMode,
 } from "@rendezvous/contracts";
+import { CITY_CATALOG } from "@rendezvous/domain";
 import { useQuery } from "@tanstack/react-query";
 import {
   advancedSlidersToWeights,
@@ -47,6 +48,11 @@ const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
   bus: "Автобус",
   suburban: "Электричка",
 };
+
+const ORIGIN_CITIES = [...CITY_CATALOG]
+  .sort((a, b) => b.hubScore - a.hubScore)
+  .slice(0, 12);
+const MOSCOW_ID = CITY_CATALOG.find((city) => city.name === "Москва")!.id;
 
 export function StartPage() {
   const { data: trips, isLoading } = useTrips();
@@ -474,19 +480,13 @@ export function PreferencesPage() {
               Город отправления
               <select
                 name="origin"
-                defaultValue={
-                  view.me.originCityId ?? "42000000-0000-4000-8000-000000000001"
-                }
+                defaultValue={view.me.originCityId ?? MOSCOW_ID}
               >
-                <option value="42000000-0000-4000-8000-000000000001">
-                  Москва
-                </option>
-                <option value="42000000-0000-4000-8000-000000000002">
-                  Санкт-Петербург
-                </option>
-                <option value="42000000-0000-4000-8000-000000000003">
-                  Казань
-                </option>
+                {ORIGIN_CITIES.map((city) => (
+                  <option key={city.id} value={city.id}>
+                    {city.name}
+                  </option>
+                ))}
               </select>
             </label>
             <div className="form-grid">

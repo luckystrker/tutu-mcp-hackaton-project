@@ -87,7 +87,6 @@ const worker = new RecomputeWorker(
 const requeued = await repository.requeueOrphanedJobs();
 if (requeued > 0)
   app.log.warn({ requeued }, "requeued orphaned recompute jobs after restart");
-worker.start();
 
 const shutdown = createShutdown({
   closeServer: async () => {
@@ -116,6 +115,9 @@ try {
   await app.listen({ host: config.HOST, port: config.PORT });
 } catch (error) {
   app.log.fatal({ err: error }, "server failed to start");
-  await database.close();
-  process.exitCode = 1;
+  await shutdown().catch((cleanupError: unknown) => {
+    app.log.error({ err: cleanupError }, "startup cleanup failed");
+  });
+  process.exit(1);
 }
+worker.start();
