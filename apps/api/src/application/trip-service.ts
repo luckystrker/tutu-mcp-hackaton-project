@@ -42,6 +42,14 @@ export class TripService {
     return this.getTrip(actor, tripId);
   }
 
+  async joinByInvite(
+    actor: Actor,
+    inviteToken: string,
+  ): Promise<TripGroupDto | TripOrganizerDto> {
+    const tripId = await this.repository.resolveInvite(inviteToken);
+    return this.joinTrip(actor, tripId, inviteToken);
+  }
+
   async getTrip(
     actor: Actor,
     tripId: string,

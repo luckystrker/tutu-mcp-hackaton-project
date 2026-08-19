@@ -35,6 +35,23 @@ export const JoinTripInputSchema = z.strictObject({
 });
 export const InviteTokenResponseSchema = z.strictObject({
   inviteToken: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
+  startAppUrl: z.url(),
+});
+
+export const TelegramAuthInputSchema = z.strictObject({
+  initData: z.string().min(1).max(16_384),
+});
+export const DevAuthInputSchema = z.strictObject({
+  userId: EntityIdSchema,
+  displayName: NonEmptyTextSchema.max(200),
+});
+export const AuthSessionSchema = z.strictObject({
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  expiresAt: IsoDateTimeSchema,
+  user: z.strictObject({
+    id: EntityIdSchema,
+    displayName: NonEmptyTextSchema,
+  }),
 });
 
 export const UpdatePreferencesInputSchema = z
@@ -104,3 +121,4 @@ export type UpdateScoringInput = z.infer<typeof UpdateScoringInputSchema>;
 export type SetReactionInput = z.infer<typeof SetReactionInputSchema>;
 export type SetShortlistInput = z.infer<typeof SetShortlistInputSchema>;
 export type FinalizeTripInput = z.infer<typeof FinalizeTripInputSchema>;
+export type AuthSession = z.infer<typeof AuthSessionSchema>;

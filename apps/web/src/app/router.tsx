@@ -22,7 +22,7 @@ export const router = createBrowserRouter([
   { path: "/", element: <StartPage /> },
   { path: "/new", element: <CreateTripPage /> },
   { path: "/trips", element: <TripsPage /> },
-  { path: "/join/:tripId/:inviteToken", element: <JoinPage /> },
+  { path: "/join/:inviteToken", element: <JoinPage /> },
   { path: "/trips/:tripId/me", element: <PreferencesPage /> },
   { path: "/trips/:tripId/live", element: <LiveRoomPage /> },
   { path: "/trips/:tripId/cities/:cityId", element: <DestinationPage /> },

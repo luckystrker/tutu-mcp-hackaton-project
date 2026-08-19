@@ -21,6 +21,7 @@ import { ComputeBanner } from "../components/ComputeBanner.js";
 import { ParticipantSpokes } from "../components/ParticipantSpokes.js";
 import { ScoreBreakdown } from "../components/ScoreBreakdown.js";
 import {
+  tripKeys,
   usePreferencesMutation,
   useReactionMutation,
   useScoringMutation,
@@ -301,12 +302,15 @@ export function InvitePage() {
   const api = useApi();
   const { data: view, isLoading: tripLoading } = useTrip(id);
   const { data: token, isLoading: tokenLoading } = useQuery({
-    queryKey: ["trip", id, "invite"],
-    queryFn: () => api.getInviteToken(id),
+    queryKey: tripKeys.invite(id),
+    queryFn: () => api.getInvite(id),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
   });
   const [feedback, setFeedback] = useState("");
   if (tripLoading || tokenLoading || !view || !token) return <Loading />;
-  const inviteUrl = `${window.location.origin}/join/${id}/${token}`;
+  const inviteUrl = token.startAppUrl;
   const tripTitle = view.trip.title;
   async function share() {
     if (navigator.share) {
@@ -381,7 +385,7 @@ function TripListItem({ trip }: { trip: TripPublic }) {
 }
 
 export function JoinPage() {
-  const { tripId = "", inviteToken = "" } = useParams();
+  const { inviteToken = "" } = useParams();
   const api = useApi();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -389,7 +393,7 @@ export function JoinPage() {
   async function join() {
     setBusy(true);
     try {
-      const trip = await api.joinTrip(tripId, inviteToken);
+      const trip = await api.joinTrip(inviteToken);
       navigate(`/trips/${trip.trip.id}/me`);
     } catch {
       setBusy(false);

@@ -50,6 +50,10 @@ describeDatabase("scoring and membership integrity", () => {
 
   beforeAll(async () => {
     database = createDatabase(databaseUrl!);
+    await database.query(
+      `DELETE FROM rendezvous.trips WHERE organizer_user_id=ANY($1::uuid[])`,
+      [[organizerId, memberId]],
+    );
     repository = new TripRepository(database);
     await repository.syncCityCatalog(CITY_CATALOG, CITY_CATALOG_VERSION);
     app = buildApp({
@@ -243,9 +247,8 @@ describeDatabase("scoring and membership integrity", () => {
     const created = CreateTripResponseSchema.parse(createdResponse.json());
     const joined = await app.inject({
       method: "POST",
-      url: `/api/trips/${created.trip.id}/join`,
+      url: `/api/invites/${created.inviteToken}/join`,
       headers: actorHeaders(memberId, "Участник"),
-      payload: { inviteToken: created.inviteToken },
     });
     expect(joined.statusCode).toBe(200);
     const origins = CITY_CATALOG.slice(0, 2);

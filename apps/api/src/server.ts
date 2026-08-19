@@ -12,6 +12,7 @@ import {
 } from "@rendezvous/tutu";
 import { config as loadDotenv } from "dotenv";
 import { TripService } from "./application/trip-service.js";
+import { SessionService } from "./auth/session-service.js";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createDatabase } from "./db.js";
@@ -37,10 +38,15 @@ const config = loadConfig(process.env);
 const database = createDatabase(config.DATABASE_URL);
 const repository = new TripRepository(database);
 await repository.syncCityCatalog(CITY_CATALOG, CITY_CATALOG_VERSION);
+await repository.pruneEventOutbox();
 const publicCities = new Map(
   CITY_CATALOG.map(({ id, name, country }) => [id, { id, name, country }]),
 );
 const tripService = new TripService(repository, publicCities);
+const sessions = new SessionService(
+  database,
+  config.TELEGRAM_BOT_TOKEN ?? "development-only-token",
+);
 const metrics = new InMemoryTutuMetrics();
 const recomputeMetrics = new InMemoryRecomputeMetrics();
 const app = buildApp({
@@ -53,7 +59,24 @@ const app = buildApp({
       recomputeMetrics.p95ReadyToPublished(),
     recomputeLatencyReadyToPublishedTargetMs: 60_000,
   }),
+  authenticator: sessions,
+  sessions,
+  allowDevAuth: config.NODE_ENV !== "production",
+  allowedOrigin: new URL(config.PUBLIC_MINI_APP_URL).origin,
+  trustProxy: config.TRUST_PROXY,
+  inviteUrl: (token) =>
+    config.TELEGRAM_BOT_USERNAME && config.TELEGRAM_MINI_APP_SHORT_NAME
+      ? `https://t.me/${config.TELEGRAM_BOT_USERNAME.replace(/^@/, "")}/${config.TELEGRAM_MINI_APP_SHORT_NAME}?startapp=${token}`
+      : `${config.PUBLIC_MINI_APP_URL.replace(/\/$/, "")}/join/${token}`,
 });
+const outboxRetentionTimer = setInterval(
+  () =>
+    void repository.pruneEventOutbox().catch((error: unknown) => {
+      app.log.error({ err: error }, "failed to prune event outbox");
+    }),
+  60 * 60_000,
+);
+outboxRetentionTimer.unref();
 const tutuCaller = createTutuToolCaller({
   url: new URL(config.TUTU_MCP_URL),
   timeoutMs: 10_000,
@@ -90,6 +113,7 @@ if (requeued > 0)
 
 const shutdown = createShutdown({
   closeServer: async () => {
+    clearInterval(outboxRetentionTimer);
     await worker.close();
     await tutuCaller.close();
     await app.close();

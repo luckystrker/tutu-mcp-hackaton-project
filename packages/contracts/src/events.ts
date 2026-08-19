@@ -54,12 +54,16 @@ export const TripEventSchema = z.discriminatedUnion("type", [
     type: z.literal("reaction_added"),
     payload: z.strictObject({
       cityId: EntityIdSchema,
-      value: z.enum(["love", "ok", "no"]),
+      value: z.enum(["love", "ok", "no"]).optional(),
     }),
   }),
   EventBaseSchema.extend({
     type: z.literal("trip_finalized"),
     payload: z.strictObject({ cityId: EntityIdSchema }),
+  }),
+  EventBaseSchema.extend({
+    type: z.literal("resync_required"),
+    payload: z.strictObject({ reason: z.enum(["retention", "gap"]) }),
   }),
 ]);
 

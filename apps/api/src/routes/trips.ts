@@ -3,7 +3,6 @@ import {
   CreateTripResponseSchema,
   EntityIdSchema,
   FinalizeTripInputSchema,
-  JoinTripInputSchema,
   InviteTokenResponseSchema,
   ParticipantSelfDtoSchema,
   SetReactionInputSchema,
@@ -17,8 +16,9 @@ import {
 } from "@rendezvous/contracts";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { actorFromHeaders } from "../application/actor.js";
+import type { ActorAuthenticator } from "../auth/session-service.js";
 import type { TripService } from "../application/trip-service.js";
+import { createRateLimiter } from "../rate-limit.js";
 
 const ParamsSchema = z.strictObject({ tripId: EntityIdSchema });
 const ReactionParamsSchema = ParamsSchema.extend({ cityId: EntityIdSchema });
@@ -27,12 +27,24 @@ const EventQuerySchema = z.strictObject({
   after: z.coerce.number().int().nonnegative().default(0),
 });
 
-export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
-  app,
-  options,
-) => {
+export const tripRoutes: FastifyPluginAsync<{
+  service: TripService;
+  authenticator: ActorAuthenticator;
+  inviteUrl: (token: string) => string;
+}> = async (app, options) => {
+  const limiter = createRateLimiter({
+    windowMs: 60_000,
+    message: "Too many mutations",
+  });
+  app.addHook("onRequest", async (request) => {
+    if (request.method === "GET" || request.method === "OPTIONS") return;
+    limiter.check(
+      request.ip,
+      request.url.startsWith("/api/invites/") ? 30 : 120,
+    );
+  });
   app.post("/api/trips", async (request, reply) => {
-    const actor = actorFromHeaders(request.headers);
+    const actor = await options.authenticator.authenticate(request.headers);
     const result = await options.service.createTrip(
       actor,
       CreateTripInputSchema.parse(request.body),
@@ -42,20 +54,25 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
 
   app.get("/api/trips", async (request) => {
     return TripListSchema.parse(
-      await options.service.listTrips(actorFromHeaders(request.headers)),
+      await options.service.listTrips(
+        await options.authenticator.authenticate(request.headers),
+      ),
     );
   });
 
   app.get("/api/trips/:tripId", async (request) => {
     const { tripId } = ParamsSchema.parse(request.params);
     return TripViewSchema.parse(
-      await options.service.getTrip(actorFromHeaders(request.headers), tripId),
+      await options.service.getTrip(
+        await options.authenticator.authenticate(request.headers),
+        tripId,
+      ),
     );
   });
 
   app.get("/api/trips/:tripId/events", async (request, reply) => {
     const { tripId } = ParamsSchema.parse(request.params);
-    const actor = actorFromHeaders(request.headers);
+    const actor = await options.authenticator.authenticate(request.headers);
     const headerCursor = Number(request.headers["last-event-id"] ?? 0);
     let cursor =
       EventQuerySchema.parse(request.query).after ||
@@ -75,6 +92,7 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
       "x-accel-buffering": "no",
     });
     let closed = false;
+    let lastHeartbeatAt = Date.now();
     request.raw.once("close", () => {
       closed = true;
     });
@@ -99,6 +117,10 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
     writeEvents(initialEvents);
     const timer = setInterval(() => {
       if (closed) return clearInterval(timer);
+      if (Date.now() - lastHeartbeatAt >= 15_000) {
+        reply.raw.write(`: heartbeat ${Date.now()}\n\n`);
+        lastHeartbeatAt = Date.now();
+      }
       void publish().catch((error: unknown) => {
         request.log.error({ err: error }, "SSE publisher failed");
         clearInterval(timer);
@@ -108,32 +130,34 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
     timer.unref();
   });
 
-  app.post("/api/trips/:tripId/join", async (request) => {
+  app.post("/api/trips/:tripId/invite-token", async (request) => {
     const { tripId } = ParamsSchema.parse(request.params);
-    const { inviteToken } = JoinTripInputSchema.parse(request.body);
+    const inviteToken = await options.service.rotateInviteToken(
+      await options.authenticator.authenticate(request.headers),
+      tripId,
+    );
+    return InviteTokenResponseSchema.parse({
+      inviteToken,
+      startAppUrl: options.inviteUrl(inviteToken),
+    });
+  });
+
+  app.post("/api/invites/:inviteToken/join", async (request) => {
+    const { inviteToken } = z
+      .strictObject({ inviteToken: z.string().regex(/^[A-Za-z0-9_-]{22}$/) })
+      .parse(request.params);
     return TripViewSchema.parse(
-      await options.service.joinTrip(
-        actorFromHeaders(request.headers),
-        tripId,
+      await options.service.joinByInvite(
+        await options.authenticator.authenticate(request.headers),
         inviteToken,
       ),
     );
   });
 
-  app.post("/api/trips/:tripId/invite-token", async (request) => {
-    const { tripId } = ParamsSchema.parse(request.params);
-    return InviteTokenResponseSchema.parse({
-      inviteToken: await options.service.rotateInviteToken(
-        actorFromHeaders(request.headers),
-        tripId,
-      ),
-    });
-  });
-
   app.get("/api/trips/:tripId/me/preferences", async (request) => {
     const { tripId } = ParamsSchema.parse(request.params);
     const view = await options.service.getTrip(
-      actorFromHeaders(request.headers),
+      await options.authenticator.authenticate(request.headers),
       tripId,
     );
     return ParticipantSelfDtoSchema.parse(view.me);
@@ -143,7 +167,7 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
     const { tripId } = ParamsSchema.parse(request.params);
     return TripViewSchema.parse(
       await options.service.updatePreferences(
-        actorFromHeaders(request.headers),
+        await options.authenticator.authenticate(request.headers),
         tripId,
         UpdatePreferencesInputSchema.parse(request.body),
       ),
@@ -154,7 +178,7 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
     const { tripId } = ParamsSchema.parse(request.params);
     return TripViewSchema.parse(
       await options.service.updateSettings(
-        actorFromHeaders(request.headers),
+        await options.authenticator.authenticate(request.headers),
         tripId,
         UpdateTripSettingsInputSchema.parse(request.body),
       ),
@@ -165,7 +189,7 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
     const { tripId } = ParamsSchema.parse(request.params);
     return TripViewSchema.parse(
       await options.service.updateScoring(
-        actorFromHeaders(request.headers),
+        await options.authenticator.authenticate(request.headers),
         tripId,
         UpdateScoringInputSchema.parse(request.body),
       ),
@@ -175,7 +199,7 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
   app.post("/api/trips/:tripId/reactions", async (request, reply) => {
     const { tripId } = ParamsSchema.parse(request.params);
     await options.service.setReaction(
-      actorFromHeaders(request.headers),
+      await options.authenticator.authenticate(request.headers),
       tripId,
       SetReactionInputSchema.parse(request.body),
     );
@@ -185,7 +209,7 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
   app.delete("/api/trips/:tripId/reactions/:cityId", async (request, reply) => {
     const { tripId, cityId } = ReactionParamsSchema.parse(request.params);
     await options.service.deleteReaction(
-      actorFromHeaders(request.headers),
+      await options.authenticator.authenticate(request.headers),
       tripId,
       cityId,
     );
@@ -196,7 +220,7 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
     const { tripId } = ParamsSchema.parse(request.params);
     const { cityIds } = SetShortlistInputSchema.parse(request.body);
     await options.service.setShortlist(
-      actorFromHeaders(request.headers),
+      await options.authenticator.authenticate(request.headers),
       tripId,
       cityIds,
     );
@@ -207,7 +231,7 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
     app.post(`/api/trips/:tripId/${action}`, async (request, reply) => {
       const { tripId } = ParamsSchema.parse(request.params);
       await options.service.transition(
-        actorFromHeaders(request.headers),
+        await options.authenticator.authenticate(request.headers),
         tripId,
         action,
       );
@@ -217,7 +241,10 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
 
   app.post("/api/trips/:tripId/leave", async (request, reply) => {
     const { tripId } = ParamsSchema.parse(request.params);
-    await options.service.leave(actorFromHeaders(request.headers), tripId);
+    await options.service.leave(
+      await options.authenticator.authenticate(request.headers),
+      tripId,
+    );
     return reply.status(204).send();
   });
 
@@ -225,7 +252,7 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
     const { tripId } = ParamsSchema.parse(request.params);
     const { destinationResultId } = FinalizeTripInputSchema.parse(request.body);
     return options.service.finalize(
-      actorFromHeaders(request.headers),
+      await options.authenticator.authenticate(request.headers),
       tripId,
       destinationResultId,
     );

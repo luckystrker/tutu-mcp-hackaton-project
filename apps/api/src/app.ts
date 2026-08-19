@@ -3,6 +3,12 @@ import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import { ZodError } from "zod";
 import { ApplicationError } from "./application/errors.js";
 import type { TripService } from "./application/trip-service.js";
+import { headerAuthenticator } from "./application/actor.js";
+import type {
+  ActorAuthenticator,
+  SessionService,
+} from "./auth/session-service.js";
+import { authRoutes } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { tripRoutes } from "./routes/trips.js";
 
@@ -11,6 +17,12 @@ export type AppDependencies = {
   tripService?: TripService;
   logger?: FastifyServerOptions["logger"];
   metricsSnapshot?: () => Readonly<Record<string, unknown>>;
+  authenticator?: ActorAuthenticator;
+  sessions?: SessionService;
+  allowDevAuth?: boolean;
+  allowedOrigin?: string;
+  inviteUrl?: (token: string) => string;
+  trustProxy?: boolean | number | string | undefined;
 };
 
 const CODE_BY_STATUS: Record<number, string> = {
@@ -38,6 +50,41 @@ export function buildApp(dependencies: AppDependencies) {
     logger: dependencies.logger ?? false,
     genReqId: (request) =>
       request.headers["x-request-id"]?.toString() ?? crypto.randomUUID(),
+    ...(dependencies.trustProxy === undefined
+      ? {}
+      : {
+          trustProxy: dependencies.trustProxy as NonNullable<
+            FastifyServerOptions["trustProxy"]
+          >,
+        }),
+  });
+
+  if (dependencies.allowedOrigin) {
+    app.addHook("onRequest", async (request, reply) => {
+      const origin = request.headers.origin;
+      if (origin === dependencies.allowedOrigin) {
+        reply.header("access-control-allow-origin", origin);
+        reply.header("vary", "Origin");
+        reply.header(
+          "access-control-allow-headers",
+          "authorization,content-type,last-event-id",
+        );
+        reply.header(
+          "access-control-allow-methods",
+          "GET,POST,PUT,DELETE,OPTIONS",
+        );
+      }
+      if (request.method === "OPTIONS") return reply.status(204).send();
+    });
+  }
+  app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("x-content-type-options", "nosniff");
+    reply.header("referrer-policy", "no-referrer");
+    reply.header(
+      "content-security-policy",
+      "default-src 'none'; frame-ancestors https://web.telegram.org https://*.telegram.org",
+    );
+    return payload;
   });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
@@ -84,6 +131,17 @@ export function buildApp(dependencies: AppDependencies) {
       : {}),
   });
   if (dependencies.tripService)
-    void app.register(tripRoutes, { service: dependencies.tripService });
+    void app.register(tripRoutes, {
+      service: dependencies.tripService,
+      authenticator: dependencies.authenticator ?? headerAuthenticator,
+      inviteUrl:
+        dependencies.inviteUrl ??
+        ((token) => `http://localhost:5173/join/${token}`),
+    });
+  if (dependencies.sessions)
+    void app.register(authRoutes, {
+      sessions: dependencies.sessions,
+      allowDevAuth: dependencies.allowDevAuth ?? false,
+    });
   return app;
 }

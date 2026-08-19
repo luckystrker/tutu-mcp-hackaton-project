@@ -11,7 +11,11 @@ import type {
   UpdatePreferencesInput,
   UpdateTripSettingsInput,
 } from "@rendezvous/contracts";
-import { ParticipantPrivateSchema, TripSchema } from "@rendezvous/contracts";
+import {
+  ParticipantPrivateSchema,
+  TripEventSchema,
+  TripSchema,
+} from "@rendezvous/contracts";
 import type { SolverOutput } from "@rendezvous/solver";
 import type { Queryable, Database } from "../db.js";
 import type { Actor } from "../application/actor.js";
@@ -152,7 +156,8 @@ export class TripRepository {
       if (trip.status === "FINALIZED" || trip.status === "CANCELLED")
         throw new ApplicationError("TRIP_CLOSED", 409, "Trip is closed");
       const token = await client.query<{ valid: boolean }>(
-        `SELECT invite_token_hash = $2 AS valid FROM rendezvous.trips WHERE id=$1`,
+        `SELECT invite_token_hash = $2 AND invite_expires_at > now() AS valid
+         FROM rendezvous.trips WHERE id=$1`,
         [tripId, hashToken(inviteToken)],
       );
       if (!token.rows[0]?.valid) notFound();
@@ -178,6 +183,16 @@ export class TripRepository {
     });
   }
 
+  async resolveInvite(inviteToken: string): Promise<string> {
+    const result = await this.database.query<{ id: string }>(
+      `SELECT id FROM rendezvous.trips
+       WHERE invite_token_hash=$1 AND invite_expires_at>now()`,
+      [hashToken(inviteToken)],
+    );
+    if (!result.rows[0]) notFound();
+    return result.rows[0].id;
+  }
+
   async rotateInviteToken(actorId: string, tripId: string): Promise<string> {
     return this.database.transaction(async (client) => {
       const trip = await lockedTrip(client, tripId);
@@ -185,7 +200,8 @@ export class TripRepository {
       requireEditable(trip);
       const token = randomBytes(16).toString("base64url");
       await client.query(
-        `UPDATE rendezvous.trips SET invite_token_hash=$2,updated_at=now() WHERE id=$1`,
+        `UPDATE rendezvous.trips SET invite_token_hash=$2,
+           invite_expires_at=now()+interval '30 days',updated_at=now() WHERE id=$1`,
         [tripId, hashToken(token)],
       );
       return token;
@@ -808,14 +824,47 @@ export class TripRepository {
        WHERE trip_id=$1 AND id>$2 ORDER BY id LIMIT $3`,
       [tripId, afterId, Math.min(Math.max(limit, 1), 100)],
     );
-    return result.rows.map((row) => ({
-      id: row.id,
-      tripId,
-      revision: row.revision,
-      type: row.type,
-      payload: row.payload,
-      occurredAt: row.occurred_at.toISOString(),
-    })) as readonly TripEvent[];
+    if (afterId > 0) {
+      const oldest = await this.database.query<{
+        id: string;
+        revision: number;
+      }>(
+        `SELECT id::text,revision FROM rendezvous.event_outbox
+         WHERE trip_id=$1 ORDER BY id LIMIT 1`,
+        [tripId],
+      );
+      const first = oldest.rows[0];
+      if (first && afterId < Number(first.id) - 1)
+        return [
+          TripEventSchema.parse({
+            id: first.id,
+            tripId,
+            revision: first.revision,
+            type: "resync_required",
+            payload: { reason: "retention" },
+            occurredAt: new Date().toISOString(),
+          }),
+        ];
+    }
+    return result.rows.map((row) =>
+      TripEventSchema.parse({
+        id: row.id,
+        tripId,
+        revision: row.revision,
+        type: row.type,
+        payload: row.payload,
+        occurredAt: row.occurred_at.toISOString(),
+      }),
+    );
+  }
+
+  async pruneEventOutbox(retentionHours = 24): Promise<number> {
+    const result = await this.database.query(
+      `DELETE FROM rendezvous.event_outbox
+       WHERE occurred_at < now() - ($1::text || ' hours')::interval`,
+      [Math.max(1, Math.floor(retentionHours))],
+    );
+    return result.rowCount ?? 0;
   }
 
   private async latestDestinations(

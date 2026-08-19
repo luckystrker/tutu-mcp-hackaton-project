@@ -10,6 +10,7 @@ import { useApi } from "../../app/providers.js";
 export const tripKeys = {
   all: ["trips"] as const,
   detail: (id: string) => ["trip", id] as const,
+  invite: (id: string) => ["invite", id] as const,
 };
 
 export function useTrips() {
@@ -24,13 +25,30 @@ export function useTrip(id: string) {
     queryKey: tripKeys.detail(id),
     queryFn: () => api.getTrip(id),
   });
-  useEffect(
-    () =>
-      api.subscribeToTrip?.(id, () => {
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    const start = () => {
+      if (document.visibilityState === "hidden" || unsubscribe) return;
+      unsubscribe = api.subscribeToTrip?.(id, () => {
         void client.invalidateQueries({ queryKey: tripKeys.detail(id) });
-      }),
-    [api, client, id],
-  );
+      });
+    };
+    const visibility = () => {
+      if (document.visibilityState === "hidden") {
+        unsubscribe?.();
+        unsubscribe = undefined;
+      } else {
+        void client.invalidateQueries({ queryKey: tripKeys.detail(id) });
+        start();
+      }
+    };
+    start();
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      document.removeEventListener("visibilitychange", visibility);
+      unsubscribe?.();
+    };
+  }, [api, client, id]);
   return query;
 }
 

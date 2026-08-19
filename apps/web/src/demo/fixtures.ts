@@ -196,9 +196,13 @@ export class FixtureRendezvousApi implements RendezvousApi {
     );
   }
 
-  async getInviteToken(id: string): Promise<string> {
+  async getInvite(id: string) {
     await this.getTrip(id);
-    return "abcdefghijklmnopqrstuv";
+    const inviteToken = "abcdefghijklmnopqrstuv";
+    return {
+      inviteToken,
+      startAppUrl: `${window.location.origin}/join/${inviteToken}`,
+    };
   }
 
   async createTrip(input: CreateTripInput) {
@@ -211,8 +215,8 @@ export class FixtureRendezvousApi implements RendezvousApi {
     });
   }
 
-  async joinTrip(id: string, _inviteToken: string): Promise<TripView> {
-    return this.getTrip(id);
+  async joinTrip(_inviteToken: string): Promise<TripView> {
+    return this.getTrip(DEMO_TRIP_IDS.live);
   }
 
   async updateMyPreferences(

@@ -99,9 +99,8 @@ describeDatabase("stage 5 data/API/workflow", () => {
 
     const joined = await app.inject({
       method: "POST",
-      url: `/api/trips/${tripId}/join`,
+      url: `/api/invites/${inviteToken}/join`,
       headers: actorHeaders(memberId, "Участник"),
-      payload: { inviteToken },
     });
     expect(joined.statusCode).toBe(200);
 

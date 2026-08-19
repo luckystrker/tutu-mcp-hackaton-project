@@ -117,3 +117,15 @@ REST response является подтверждением команды, SSE 
 ## Связь со SPEC
 
 Разделы 3, 6–7, 43–44, 51, 54, 64 Phase 5–6.
+
+## Evidence реализации
+
+- `0004_telegram_sessions.sql`: hashed bearer sessions и invite expiry.
+- `telegram.test.ts`: valid/tampered/expired initData.
+- `stage7.integration.test.ts`: bearer-only API, opaque rotation, capacity race,
+  outsider/privacy, session rotation, CORS и запуск recompute после двух ready.
+- `api.test.ts`: клиентская discriminated-валидация SSE и privacy projection.
+- Проверка: `npm run verify` и serial DB-suite с `DATABASE_URL`.
+
+Финальная Telegram device-проверка требует deploy URL, bot username/short name и
+реальный `TELEGRAM_BOT_TOKEN`; локальный контур использует `/api/auth/dev`.

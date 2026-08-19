@@ -35,5 +35,5 @@ jobs:
       - run: npm run db:migrate
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      - run: npm test -- --no-file-parallelism
       - run: npm run build

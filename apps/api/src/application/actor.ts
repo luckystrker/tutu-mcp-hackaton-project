@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApplicationError } from "./errors.js";
+import type { ActorAuthenticator } from "../auth/session-service.js";
 
 const ActorIdSchema = z.uuid();
 
@@ -17,10 +18,17 @@ export function actorFromHeaders(
     );
   const rawName = headers["x-user-name"];
   const encodedName = (Array.isArray(rawName) ? rawName[0] : rawName)?.trim();
-  const displayName =
-    decodeDisplayName(encodedName) || "Test user";
+  const displayName = decodeDisplayName(encodedName) || "Test user";
   return { userId: parsed.data, displayName: displayName.slice(0, 200) };
 }
+
+export const headerAuthenticator: ActorAuthenticator = {
+  async authenticate(headers) {
+    return actorFromHeaders(
+      headers as Record<string, string | string[] | undefined>,
+    );
+  },
+};
 
 function decodeDisplayName(value: string | undefined): string {
   if (!value) return "";

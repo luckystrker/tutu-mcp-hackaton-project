@@ -1,11 +1,14 @@
 import {
+  AuthSessionSchema,
   CreateTripResponseSchema,
   InviteTokenResponseSchema,
   TripGroupDtoSchema,
   TripListSchema,
   TripOrganizerDtoSchema,
+  TripEventSchema,
 } from "@rendezvous/contracts";
 import type {
+  AuthSession,
   CreateTripInput,
   CreateTripResponse,
   ScoringConfig,
@@ -15,15 +18,16 @@ import type {
   TripPublic,
   UpdatePreferencesInput,
 } from "@rendezvous/contracts";
+import { telegramInitData } from "../../telegram/bridge.js";
 
 export type TripView = TripGroupDto | TripOrganizerDto;
 
 export interface RendezvousApi {
   listTrips(): Promise<readonly TripPublic[]>;
   getTrip(id: string): Promise<TripView>;
-  getInviteToken(id: string): Promise<string>;
+  getInvite(id: string): Promise<{ inviteToken: string; startAppUrl: string }>;
   createTrip(input: CreateTripInput): Promise<CreateTripResponse>;
-  joinTrip(id: string, inviteToken: string): Promise<TripView>;
+  joinTrip(inviteToken: string): Promise<TripView>;
   updateMyPreferences(
     id: string,
     input: UpdatePreferencesInput,
@@ -38,6 +42,8 @@ export interface RendezvousApi {
 const TripViewSchema = TripOrganizerDtoSchema.or(TripGroupDtoSchema);
 
 export class HttpRendezvousApi implements RendezvousApi {
+  #session: AuthSession | undefined;
+  #authRequest: Promise<AuthSession> | undefined;
   constructor(
     private readonly baseUrl = "",
     private readonly identity = browserIdentity(),
@@ -49,10 +55,10 @@ export class HttpRendezvousApi implements RendezvousApi {
   async getTrip(id: string) {
     return TripViewSchema.parse(await this.request(`/api/trips/${id}`));
   }
-  async getInviteToken(id: string) {
+  async getInvite(id: string) {
     return InviteTokenResponseSchema.parse(
       await this.request(`/api/trips/${id}/invite-token`, { method: "POST" }),
-    ).inviteToken;
+    );
   }
   async createTrip(input: CreateTripInput) {
     return CreateTripResponseSchema.parse(
@@ -62,11 +68,10 @@ export class HttpRendezvousApi implements RendezvousApi {
       }),
     );
   }
-  async joinTrip(id: string, inviteToken: string) {
+  async joinTrip(inviteToken: string) {
     return TripViewSchema.parse(
-      await this.request(`/api/trips/${id}/join`, {
+      await this.request(`/api/invites/${inviteToken}/join`, {
         method: "POST",
-        body: JSON.stringify({ inviteToken }),
       }),
     );
   }
@@ -120,20 +125,24 @@ export class HttpRendezvousApi implements RendezvousApi {
     signal: AbortSignal,
   ): Promise<void> {
     let cursor = 0;
+    let failures = 0;
     while (!signal.aborted) {
       try {
+        const session = await this.ensureSession();
         const response = await fetch(
           `${this.baseUrl}/api/trips/${id}/events?after=${cursor}`,
           {
             headers: {
-              "x-user-id": this.identity.id,
-              "x-user-name": encodeURIComponent(this.identity.name),
+              authorization: `Bearer ${session.token}`,
             },
             signal,
           },
         );
+        if (response.status === 401) this.#session = undefined;
         if (!response.ok || !response.body)
           throw new Error(`SSE_${response.status}`);
+        failures = 0;
+        onEvent();
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -145,17 +154,24 @@ export class HttpRendezvousApi implements RendezvousApi {
           while (boundary >= 0) {
             const frame = buffer.slice(0, boundary);
             buffer = buffer.slice(boundary + 2);
-            const eventId = /^id:\s*(\d+)$/m.exec(frame)?.[1];
-            if (eventId) cursor = Number(eventId);
-            if (/^data:/m.test(frame)) onEvent();
+            const event = parseSseFrame(frame);
+            if (event) {
+              const nextCursor = Number(event.id);
+              if (nextCursor > cursor) {
+                cursor = nextCursor;
+                onEvent();
+              }
+            }
             boundary = buffer.indexOf("\n\n");
           }
         }
       } catch {
         if (signal.aborted) return;
+        failures += 1;
       }
       await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, 1_000);
+        const base = Math.min(15_000, 500 * 2 ** Math.min(failures, 5));
+        const timer = setTimeout(resolve, base * (0.75 + Math.random() * 0.5));
         signal.addEventListener(
           "abort",
           () => {
@@ -171,19 +187,60 @@ export class HttpRendezvousApi implements RendezvousApi {
   private async request(
     path: string,
     init: RequestInit = {},
+    retryAuthentication = true,
   ): Promise<unknown> {
+    const session = await this.ensureSession();
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
       headers: {
         "content-type": "application/json",
-        "x-user-id": this.identity.id,
-        "x-user-name": encodeURIComponent(this.identity.name),
+        authorization: `Bearer ${session.token}`,
         ...init.headers,
       },
     });
+    if (response.status === 401 && retryAuthentication) {
+      this.#session = undefined;
+      return this.request(path, init, false);
+    }
     if (!response.ok) throw new Error(`API_${response.status}`);
     return response.status === 204 ? undefined : response.json();
   }
+
+  private ensureSession(): Promise<AuthSession> {
+    if (
+      this.#session &&
+      Date.parse(this.#session.expiresAt) > Date.now() + 30_000
+    )
+      return Promise.resolve(this.#session);
+    this.#authRequest ??= this.authenticate().finally(() => {
+      this.#authRequest = undefined;
+    });
+    return this.#authRequest;
+  }
+
+  private async authenticate(): Promise<AuthSession> {
+    const initData = telegramInitData();
+    const response = await fetch(
+      `${this.baseUrl}${initData ? "/api/auth/telegram" : "/api/auth/dev"}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          initData
+            ? { initData }
+            : { userId: this.identity.id, displayName: this.identity.name },
+        ),
+      },
+    );
+    if (!response.ok) throw new Error(`AUTH_${response.status}`);
+    this.#session = AuthSessionSchema.parse(await response.json());
+    return this.#session;
+  }
+}
+
+export function parseSseFrame(frame: string) {
+  const rawData = /^data:\s*(.+)$/m.exec(frame)?.[1];
+  return rawData ? TripEventSchema.parse(JSON.parse(rawData)) : null;
 }
 
 function browserIdentity() {
