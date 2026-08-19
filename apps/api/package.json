@@ -1,0 +1,23 @@
+{
+  "name": "@rendezvous/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --conditions development src/server.ts",
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@rendezvous/contracts": "0.1.0",
+    "dotenv": "17.4.2",
+    "fastify": "5.12.1",
+    "pg": "8.23.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "tsx": "4.23.12"
+  }
+}

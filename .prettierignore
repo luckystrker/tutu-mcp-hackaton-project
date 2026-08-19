@@ -1,0 +1,7 @@
+node_modules
+dist
+.types
+coverage
+package-lock.json
+docs/spec/SPEC.md
+docs/plan

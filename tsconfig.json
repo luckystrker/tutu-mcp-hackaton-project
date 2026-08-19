@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/contracts" },
+    { "path": "packages/domain" },
+    { "path": "packages/solver" },
+    { "path": "packages/tutu" },
+    { "path": "apps/api" },
+    { "path": "apps/web" }
+  ]
+}

@@ -1,1 +1,11 @@
 docs/spec/SPEC.md
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.types/
+coverage/
+.vite/
+*.tsbuildinfo
+.DS_Store
