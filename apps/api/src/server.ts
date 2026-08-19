@@ -12,12 +12,19 @@ import {
 } from "@rendezvous/tutu";
 import { config as loadDotenv } from "dotenv";
 import { TripService } from "./application/trip-service.js";
+import { ExplanationService } from "./application/explanation-service.js";
 import { SessionService } from "./auth/session-service.js";
 import { buildApp } from "./app.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, resolveLlmConfig } from "./config.js";
 import { createDatabase } from "./db.js";
 import { createShutdown } from "./lifecycle.js";
 import { buildLoggerOptions } from "./logging.js";
+import { InMemoryCollaborationMetrics } from "./observability/collaboration-metrics.js";
+import {
+  ExplanationGenerator,
+  InMemoryLlmMetrics,
+} from "./llm/explanation-generator.js";
+import { createLlmClient } from "./llm/llm-client.js";
 import { PostgresTravelCache } from "./repositories/postgres-travel-cache.js";
 import { TripRepository } from "./repositories/trip-repository.js";
 import {
@@ -42,33 +49,58 @@ await repository.pruneEventOutbox();
 const publicCities = new Map(
   CITY_CATALOG.map(({ id, name, country }) => [id, { id, name, country }]),
 );
-const tripService = new TripService(repository, publicCities);
+const llmMetrics = new InMemoryLlmMetrics();
+const llmConfig = resolveLlmConfig(config);
+const llmClient = llmConfig.enabled
+  ? createLlmClient({
+      baseUrl: llmConfig.baseUrl,
+      model: llmConfig.model,
+      apiKey: llmConfig.apiKey,
+      timeoutMs: 10_000,
+    })
+  : undefined;
+const explanations = new ExplanationService(
+  repository,
+  publicCities,
+  new ExplanationGenerator(llmClient, llmMetrics),
+);
+const tripService = new TripService(repository, publicCities, explanations);
 const sessions = new SessionService(
   database,
   config.TELEGRAM_BOT_TOKEN ?? "development-only-token",
 );
 const metrics = new InMemoryTutuMetrics();
 const recomputeMetrics = new InMemoryRecomputeMetrics();
+const collaborationMetrics = new InMemoryCollaborationMetrics();
 const app = buildApp({
   readinessCheck: () => database.checkReadiness(),
   tripService,
   logger: buildLoggerOptions(config.NODE_ENV),
   metricsSnapshot: () => ({
     tutu: metrics.snapshot(),
+    llm: llmMetrics.snapshot(),
     recomputeLatencyReadyToPublishedP95Ms:
       recomputeMetrics.p95ReadyToPublished(),
     recomputeLatencyReadyToPublishedTargetMs: 60_000,
+    workflow: recomputeMetrics.snapshot(),
+    collaboration: collaborationMetrics.snapshot(),
   }),
   authenticator: sessions,
   sessions,
   allowDevAuth: config.NODE_ENV !== "production",
   allowedOrigin: new URL(config.PUBLIC_MINI_APP_URL).origin,
   trustProxy: config.TRUST_PROXY,
+  collaborationMetrics,
   inviteUrl: (token) =>
     config.TELEGRAM_BOT_USERNAME && config.TELEGRAM_MINI_APP_SHORT_NAME
       ? `https://t.me/${config.TELEGRAM_BOT_USERNAME.replace(/^@/, "")}/${config.TELEGRAM_MINI_APP_SHORT_NAME}?startapp=${token}`
       : `${config.PUBLIC_MINI_APP_URL.replace(/\/$/, "")}/join/${token}`,
 });
+if (!llmConfig.enabled && llmConfig.requested)
+  app.log.warn(
+    { missing: llmConfig.missing },
+    "incomplete optional LLM configuration; template explanations enabled",
+  );
 const outboxRetentionTimer = setInterval(
   () =>
     void repository.pruneEventOutbox().catch((error: unknown) => {

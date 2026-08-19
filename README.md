@@ -6,7 +6,7 @@ Telegram Mini App, который подбирает справедливое м
 
 - Node.js 22+
 - npm 11+
-- Docker с Compose plugin для локального PostgreSQL
+- Docker; Compose plugin удобен, но не обязателен для локального PostgreSQL
 
 ## Быстрый старт
 
@@ -18,12 +18,27 @@ npm run db:migrate
 npm run dev
 ```
 
+Если Compose plugin не установлен, уже созданную базу можно запустить командой
+`sg docker -c 'docker start rendezvous-postgres'`.
+
 Frontend доступен на `http://localhost:5173`, API — на `http://localhost:3000`. Vite проксирует `/api` и `/health` в API.
 По умолчанию frontend работает с настоящим API. Для изолированного просмотра
 всех демонстрационных состояний без backend установите `VITE_API_MODE=fixture`.
 В development браузер получает короткоживущую dev-session; внутри Telegram web
 автоматически передаёт raw `initData`, а backend проверяет подпись и выдаёт
 bearer-session. В production dev-auth отключён.
+
+LLM необязателен: без полного набора `LLM_PROVIDER`, `LLM_MODEL`,
+`LLM_BASE_URL`, `LLM_API_KEY` backend запускается с детерминированными
+template-объяснениями. Для Telegram Mini App в production дополнительно нужен
+`TELEGRAM_MINI_APP_SHORT_NAME`; при обычном локальном запуске он не требуется.
+
+С телефона в той же Wi-Fi сети откройте LAN-адрес Vite (он печатается рядом с
+`Network`, например `http://192.168.0.89:5173`) и задайте этот же адрес в
+`PUBLIC_MINI_APP_URL`. Для запуска именно внутри Telegram нужен доступный из
+интернета HTTPS URL (туннель или домен): его следует указать в
+`PUBLIC_MINI_APP_URL` и настройках Mini App в BotFather. Для ссылки вида
+`t.me/<bot>/<app>?startapp=...` также задайте `TELEGRAM_MINI_APP_SHORT_NAME`.
 
 ## Проверки
 

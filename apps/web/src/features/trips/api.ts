@@ -2,6 +2,7 @@ import {
   AuthSessionSchema,
   CreateTripResponseSchema,
   FinalTripDtoSchema,
+  ExplainResponseSchema,
   InviteTokenResponseSchema,
   TripGroupDtoSchema,
   TripListSchema,
@@ -13,6 +14,8 @@ import type {
   CreateTripInput,
   CreateTripResponse,
   FinalTripDto,
+  ExplainInput,
+  ExplainResponse,
   ScoringConfig,
   SetReactionInput,
   TripGroupDto,
@@ -28,6 +31,8 @@ export interface RendezvousApi {
   listTrips(): Promise<readonly TripPublic[]>;
   getTrip(id: string): Promise<TripView>;
   getFinal(id: string): Promise<FinalTripDto>;
+  explain(id: string, input: ExplainInput): Promise<ExplainResponse>;
+  retryComputation(id: string): Promise<TripView>;
   getInvite(id: string): Promise<{ inviteToken: string; startAppUrl: string }>;
   createTrip(input: CreateTripInput): Promise<CreateTripResponse>;
   joinTrip(inviteToken: string): Promise<TripView>;
@@ -61,6 +66,19 @@ export class HttpRendezvousApi implements RendezvousApi {
   async getFinal(id: string) {
     return FinalTripDtoSchema.parse(
       await this.request(`/api/trips/${id}/final`),
+    );
+  }
+  async explain(id: string, input: ExplainInput) {
+    return ExplainResponseSchema.parse(
+      await this.request(`/api/trips/${id}/explain`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    );
+  }
+  async retryComputation(id: string) {
+    return TripViewSchema.parse(
+      await this.request(`/api/trips/${id}/retry`, { method: "POST" }),
     );
   }
   async getInvite(id: string) {
@@ -202,7 +220,7 @@ export class HttpRendezvousApi implements RendezvousApi {
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
       headers: {
-        "content-type": "application/json",
+        ...(init.body ? { "content-type": "application/json" } : {}),
         authorization: `Bearer ${session.token}`,
         ...init.headers,
       },

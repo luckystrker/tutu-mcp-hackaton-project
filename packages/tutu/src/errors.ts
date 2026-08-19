@@ -47,6 +47,21 @@ export function classifyProviderError(
     });
   const message = safeErrorMessage(error);
   const statusCode = extractStatusCode(error, message);
+  if (
+    tool === "search_avia" &&
+    // Matches the upstream Tutu MCP tool error "avia requires avia_id for
+    // destination, but the geo lookup did not return one"; no structured code
+    // is available, so keep this in sync with the tool version in use.
+    /requires avia_id[\s\S]*geo lookup did not return one/i.test(message)
+  ) {
+    return new TutuProviderError({
+      code: "UNSUPPORTED",
+      tool,
+      message: "Air travel is unavailable for this city",
+      retryable: false,
+      cause: error,
+    });
+  }
   if (/timed?\s*out|timeout/i.test(message)) {
     return new TutuProviderError({
       code: "TIMEOUT",

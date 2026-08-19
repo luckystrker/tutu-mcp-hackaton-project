@@ -79,6 +79,43 @@ describe("Tutu adapter", () => {
     expect(caller.call).toHaveBeenCalledTimes(3);
   });
 
+  it("treats a missing avia geo id as normal mode unavailability", async () => {
+    const caller: TutuToolCaller = {
+      call: vi.fn(async (tool) => {
+        if (tool === "search_avia")
+          throw new Error(
+            "avia requires avia_id for destination, but the geo lookup did not return one",
+          );
+        return {
+          offers: [
+            {
+              offer_id: "fixture",
+              price: route.price,
+              departure_at: "2026-09-04T09:10:00+03:00",
+              arrival_at: "2026-09-04T12:40:00+03:00",
+              search_results_url: route.bookingUrl,
+            },
+          ],
+        };
+      }),
+      close: vi.fn(),
+    };
+    const adapter = createTutuTransportAdapter({ caller, timeoutMs: 1000 });
+
+    const result = await adapter.searchOutbound(
+      { ...input, allowedModes: ["air", "train"] },
+      new AbortController().signal,
+    );
+
+    expect(result).toMatchObject({
+      status: "fresh",
+      availability: "available",
+      failures: [],
+      data: [route],
+    });
+    expect(caller.call).toHaveBeenCalledTimes(2);
+  });
+
   it("includes the full window and modes in canonical cache keys", () => {
     expect(createTravelCacheKey("outbound", input)).not.toBe(
       createTravelCacheKey("outbound", {

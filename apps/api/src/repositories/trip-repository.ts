@@ -86,6 +86,11 @@ export type RecomputeJob = {
   queuedAt: string;
 };
 
+export type ExplanationContext = {
+  actorParticipantId: string;
+  solverOutput: SolverOutput;
+};
+
 export class TripRepository {
   constructor(private readonly database: Database) {}
 
@@ -277,6 +282,38 @@ export class TripRepository {
     return rows.rows.map(mapTrip);
   }
 
+  async getExplanationContext(
+    actorId: string,
+    tripId: string,
+  ): Promise<ExplanationContext> {
+    const trip = await this.database.query<TripRow>(
+      `SELECT * FROM rendezvous.trips WHERE id=$1`,
+      [tripId],
+    );
+    if (!trip.rows[0]) notFound();
+    const actorParticipantId = await participantIdForUser(
+      this.database,
+      actorId,
+      tripId,
+    );
+    const result = await this.database.query<{ solver_output: SolverOutput }>(
+      `SELECT solver_output FROM rendezvous.trip_results
+       WHERE trip_id=$1 AND revision<=$2
+       ORDER BY revision DESC,ranking_version DESC LIMIT 1`,
+      [tripId, trip.rows[0].revision],
+    );
+    if (!result.rows[0])
+      throw new ApplicationError(
+        "RESULT_NOT_READY",
+        409,
+        "Current ranking is not ready",
+      );
+    return {
+      actorParticipantId,
+      solverOutput: result.rows[0].solver_output,
+    };
+  }
+
   async updatePreferences(
     actorId: string,
     tripId: string,
@@ -319,6 +356,37 @@ export class TripRepository {
         readyCount: Number(ready.rows[0]!.count),
       });
       return revision;
+    });
+  }
+
+  async retryComputation(actorId: string, tripId: string): Promise<void> {
+    await this.database.transaction(async (client) => {
+      const trip = await lockedTrip(client, tripId);
+      await requireMembership(client, actorId, tripId);
+      requireEditable(trip);
+      if (trip.compute_status === "running")
+        throw new ApplicationError(
+          "COMPUTATION_RUNNING",
+          409,
+          "Computation is already running",
+        );
+      const ready = await client.query<{ count: string }>(
+        `SELECT count(*) FROM rendezvous.participants WHERE trip_id=$1 AND ready`,
+        [tripId],
+      );
+      if (Number(ready.rows[0]!.count) < 2)
+        throw new ApplicationError(
+          "TRIP_NOT_READY",
+          409,
+          "At least two ready participants are required",
+        );
+      const revision = trip.revision + 1;
+      await client.query(
+        `UPDATE rendezvous.trips SET revision=$2,status='LIVE',compute_status='running',updated_at=now()
+         WHERE id=$1`,
+        [tripId, revision],
+      );
+      await enqueueJob(client, tripId, revision);
     });
   }
 
@@ -798,6 +866,29 @@ export class TripRepository {
       const degraded =
         workflowDegraded ||
         destinations.some((destination) => destination.degraded);
+      if (degraded && destinations.length === 0) {
+        const previous = await client.query(
+          `SELECT 1 FROM rendezvous.trip_results r
+           JOIN rendezvous.destination_results d ON d.trip_result_id=r.id
+           WHERE r.trip_id=$1 AND r.revision<$2 LIMIT 1`,
+          [job.tripId, job.revision],
+        );
+        if (previous.rowCount) {
+          await client.query(
+            `UPDATE rendezvous.trips SET compute_status='degraded',updated_at=now() WHERE id=$1`,
+            [job.tripId],
+          );
+          await markJob(client, job.id, "SUCCEEDED");
+          await insertEvent(
+            client,
+            job.tripId,
+            job.revision,
+            "computation_finished",
+            { degraded: true, preservedPrevious: true },
+          );
+          return "persisted";
+        }
+      }
       const sourceFetchedAt =
         destinations.map(({ checkedAt }) => checkedAt).sort()[0] ??
         new Date().toISOString();

@@ -892,6 +892,23 @@ select {
   text-align: center;
   margin-top: 18px;
 }
+
+.explanation-panel {
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper, #fff);
+}
+
+.explanation-panel p:not(.eyebrow) {
+  margin: 8px 0;
+  line-height: 1.55;
+}
+
+.explanation-panel small {
+  color: var(--muted);
+}
 .compare-table {
   background: var(--card);
   border-radius: 20px;
@@ -1008,6 +1025,11 @@ select {
 .personal-route .eyebrow,
 .personal-route span {
   grid-column: 1 / -1;
+}
+.personal-route .secondary-button {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 6px;
 }
 .final-page {
   text-align: center;

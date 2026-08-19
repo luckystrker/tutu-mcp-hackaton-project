@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "./config.js";
+import { loadConfig, resolveLlmConfig } from "./config.js";
 
 const required = {
   DATABASE_URL: "postgresql://user:password@localhost:5432/rendezvous",
@@ -53,24 +53,19 @@ describe("application config", () => {
     expect(() => loadConfig({ ...required, NODE_ENV: "production" })).toThrow();
   });
 
-  it("requires all LLM fields or none", () => {
-    expect(() =>
-      loadConfig({ ...required, LLM_PROVIDER: "provider" }),
-    ).toThrow();
-    expect(() =>
-      loadConfig({
-        ...required,
-        LLM_PROVIDER: "provider",
-        LLM_MODEL: "model",
-      }),
-    ).toThrow();
-    expect(() =>
+  it("disables an incomplete optional LLM without blocking startup", () => {
+    const resolved = resolveLlmConfig(
       loadConfig({
         ...required,
         LLM_PROVIDER: "provider",
         LLM_MODEL: "model",
         LLM_BASE_URL: "https://llm.example/v1",
       }),
-    ).toThrow();
+    );
+    expect(resolved).toEqual({
+      enabled: false,
+      requested: true,
+      missing: ["LLM_API_KEY"],
+    });
   });
 });

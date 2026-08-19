@@ -101,8 +101,10 @@ export function createTutuTransportAdapter(options: {
             destinationCityId: input.destination.id,
           });
         } catch (error) {
-          if (signal.aborted) throw signal.reason ?? error;
-          const failure = classifyProviderError(error, tool).toFailure();
+          const providerError = classifyProviderError(error, tool);
+          if (tool === "search_avia" && providerError.code === "UNSUPPORTED")
+            return { options: [], failures: [] };
+          const failure = providerError.toFailure();
           return { options: [], failures: [{ ...failure, mode }] };
         }
       }),
@@ -191,7 +193,6 @@ export function createTutuTransportAdapter(options: {
         ),
       };
     } catch (error) {
-      if (signal.aborted) throw signal.reason ?? error;
       return {
         status: "partial",
         availability: "unknown",

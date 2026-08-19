@@ -3,6 +3,7 @@ export * from "./city.js";
 export * from "./common.js";
 export * from "./dto.js";
 export * from "./events.js";
+export * from "./explain.js";
 export * from "./participant.js";
 export * from "./results.js";
 export * from "./travel.js";

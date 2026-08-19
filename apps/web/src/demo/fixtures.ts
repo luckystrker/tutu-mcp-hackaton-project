@@ -1,10 +1,13 @@
 import {
   CreateTripResponseSchema,
   FinalTripDtoSchema,
+  ExplainResponseSchema,
   TripOrganizerDtoSchema,
   type CreateTripInput,
   type DestinationResultDto,
   type FinalTripDto,
+  type ExplainInput,
+  type ExplainResponse,
   type ScoringConfig,
   type SetReactionInput,
   type TripOrganizerDto,
@@ -229,6 +232,52 @@ export class FixtureRendezvousApi implements RendezvousApi {
       degraded: destination.degraded,
       finalizedAt: now,
     });
+  }
+
+  async explain(id: string, input: ExplainInput): Promise<ExplainResponse> {
+    const view = await this.getTrip(id);
+    if (input.type === "counterfactual")
+      return ExplainResponseSchema.parse({
+        source: "template",
+        factsVersion: "explanation-facts-v1",
+        text: "Попробуйте немного увеличить доступное время вместе.",
+        facts: { type: "counterfactual", city: null, changes: [] },
+      });
+    const cityId = input.type === "why" ? input.cityId : input.cityA;
+    const referenceId =
+      input.type === "compare"
+        ? input.cityB
+        : view.destinations.find(({ city }) => city.id !== cityId)?.city.id;
+    const city = view.destinations.find((item) => item.city.id === cityId)!;
+    const reference = view.destinations.find(
+      (item) => item.city.id === referenceId,
+    );
+    return ExplainResponseSchema.parse({
+      source: "template",
+      factsVersion: "explanation-facts-v1",
+      text: `${city.city.name} даёт группе хороший баланс времени и дороги.`,
+      facts: {
+        type: input.type,
+        city: city.city,
+        reference: reference?.city ?? null,
+        scoreDelta: city.score - (reference?.score ?? city.score),
+        commonTimeDeltaMinutes:
+          city.commonTimeMinutes -
+          (reference?.commonTimeMinutes ?? city.commonTimeMinutes),
+        groupCostDelta: { amount: 0, currency: "RUB" },
+        travelTimeDeltaMinutes: 0,
+        affectedParticipant: null,
+        strongestComponent: "together",
+      },
+    });
+  }
+
+  async retryComputation(id: string): Promise<TripView> {
+    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    view.trip.revision += 1;
+    view.trip.computeStatus = "running";
+    this.#views.set(id, view);
+    return TripOrganizerDtoSchema.parse(view);
   }
 
   async getInvite(id: string) {

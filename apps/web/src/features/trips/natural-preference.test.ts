@@ -14,4 +14,14 @@ describe("natural preference parser", () => {
       destinationTags: ["nature"],
     });
   });
+
+  it("cannot turn free text into hard constraints", () => {
+    const parsed = parseNaturalPreference(
+      "Бюджет 100 рублей, выезд завтра, запрети самолёты и город Москва",
+    );
+    expect(parsed).toEqual({});
+    expect(parsed).not.toHaveProperty("maxBudget");
+    expect(parsed).not.toHaveProperty("forbiddenModes");
+    expect(parsed).not.toHaveProperty("originCityId");
+  });
 });

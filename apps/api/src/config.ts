@@ -56,31 +56,48 @@ export const AppConfigSchema = z
         message: "Telegram bot username and Mini App short name are required",
       });
     }
-    if (Boolean(config.LLM_PROVIDER) !== Boolean(config.LLM_MODEL)) {
-      context.addIssue({
-        code: "custom",
-        path: ["LLM_MODEL"],
-        message: "LLM_PROVIDER and LLM_MODEL must be set together",
-      });
-    }
-    if (Boolean(config.LLM_PROVIDER) !== Boolean(config.LLM_BASE_URL)) {
-      context.addIssue({
-        code: "custom",
-        path: ["LLM_BASE_URL"],
-        message: "LLM_BASE_URL must be set when LLM_PROVIDER is set",
-      });
-    }
-    if (Boolean(config.LLM_PROVIDER) !== Boolean(config.LLM_API_KEY)) {
-      context.addIssue({
-        code: "custom",
-        path: ["LLM_API_KEY"],
-        message: "LLM_API_KEY must be set when LLM_PROVIDER is set",
-      });
-    }
   });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
 export function loadConfig(environment: NodeJS.ProcessEnv): AppConfig {
   return AppConfigSchema.parse(environment);
+}
+
+const LLM_KEYS = [
+  "LLM_PROVIDER",
+  "LLM_MODEL",
+  "LLM_BASE_URL",
+  "LLM_API_KEY",
+] as const;
+
+export function resolveLlmConfig(config: AppConfig):
+  | {
+      enabled: true;
+      provider: string;
+      model: string;
+      baseUrl: URL;
+      apiKey: string;
+      missing: readonly [];
+    }
+  | {
+      enabled: false;
+      requested: boolean;
+      missing: readonly (typeof LLM_KEYS)[number][];
+    } {
+  const missing = LLM_KEYS.filter((key) => !config[key]);
+  if (missing.length > 0)
+    return {
+      enabled: false,
+      requested: missing.length < LLM_KEYS.length,
+      missing,
+    };
+  return {
+    enabled: true,
+    provider: config.LLM_PROVIDER!,
+    model: config.LLM_MODEL!,
+    baseUrl: new URL(config.LLM_BASE_URL!),
+    apiKey: config.LLM_API_KEY!,
+    missing: [],
+  };
 }

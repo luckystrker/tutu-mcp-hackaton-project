@@ -24,10 +24,12 @@ import {
   tripKeys,
   usePreferencesMutation,
   useReactionMutation,
+  useRetryComputationMutation,
   useScoringMutation,
   useShortlistMutation,
   useFinalizeMutation,
   useFinalTrip,
+  useExplanation,
   useTrip,
   useTrips,
 } from "../features/trips/queries.js";
@@ -595,6 +597,7 @@ export function LiveRoomPage() {
   const selected = useTripUi((s) => s.selectedCityByTrip[id]);
   const select = useTripUi((s) => s.selectCity);
   const ranking = useRankingViewState(view?.destinations ?? []);
+  const retry = useRetryComputationMutation(id);
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   if (!view.me.ready) return <Navigate to={`/trips/${id}/me`} replace />;
@@ -667,7 +670,16 @@ export function LiveRoomPage() {
             ))}
           </div>
         ) : (
-          <EmptyState failed={view.trip.computeStatus === "failed"} />
+          <>
+            <EmptyState
+              failed={view.trip.computeStatus === "failed"}
+              retrying={retry.isPending}
+              onRetry={() => retry.mutate()}
+            />
+            {view.trip.computeStatus === "degraded" && (
+              <CounterfactualPanel tripId={id} />
+            )}
+          </>
         )}
         <ScoringPanel id={id} view={view} />
       </main>
@@ -766,6 +778,10 @@ export function DestinationPage() {
   const id = useTripId();
   const { cityId } = useParams();
   const { data: view, isLoading, error } = useTrip(id);
+  const explanation = useExplanation(
+    id,
+    cityId ? { type: "why", cityId } : undefined,
+  );
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   const item = view.destinations.find((d) => d.city.id === cityId);
@@ -785,6 +801,7 @@ export function DestinationPage() {
           каждого.
         </p>
         <ScoreBreakdown scores={item.components} />
+        <ExplanationPanel query={explanation} />
         <h2>Как добираемся</h2>
         <div className="route-list">
           {item.routes.map((route, index) => (
@@ -814,6 +831,12 @@ export function DestinationPage() {
 export function ComparePage() {
   const id = useTripId();
   const { data: view, isLoading, error } = useTrip(id);
+  const cityA = view?.destinations[0]?.city.id;
+  const cityB = view?.destinations[1]?.city.id;
+  const explanation = useExplanation(
+    id,
+    cityA && cityB ? { type: "compare", cityA, cityB } : undefined,
+  );
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   return (
@@ -847,8 +870,41 @@ export function ComparePage() {
             ))}
           </div>
         </div>
+        <ExplanationPanel query={explanation} />
       </main>
     </AppFrame>
+  );
+}
+
+function CounterfactualPanel({ tripId }: { tripId: string }) {
+  const explanation = useExplanation(tripId, { type: "counterfactual" });
+  return <ExplanationPanel query={explanation} title="Что можно изменить" />;
+}
+
+function ExplanationPanel({
+  query,
+  title = "Почему так",
+}: {
+  query: ReturnType<typeof useExplanation>;
+  title?: string;
+}) {
+  return (
+    <section className="explanation-panel" aria-live="polite">
+      <p className="eyebrow">{title}</p>
+      {query.isLoading ? (
+        <p>Собираем проверяемые факты…</p>
+      ) : query.error ? (
+        <p>Объяснение временно недоступно. Сам рейтинг продолжает работать.</p>
+      ) : (
+        <p>{query.data?.text}</p>
+      )}
+      {query.data && (
+        <small>
+          Основано на расчёте ·{" "}
+          {query.data.source === "llm" ? "AI-перефразирование" : "без AI"}
+        </small>
+      )}
+    </section>
   );
 }
 
@@ -1118,7 +1174,15 @@ function HotelOptions({
   );
 }
 
-function EmptyState({ failed = false }: { failed?: boolean }) {
+function EmptyState({
+  failed = false,
+  retrying = false,
+  onRetry,
+}: {
+  failed?: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
+}) {
   return (
     <section className="empty-state">
       <span>{failed ? "!" : "↻"}</span>
@@ -1130,7 +1194,15 @@ function EmptyState({ failed = false }: { failed?: boolean }) {
           ? "Предыдущие условия сохранены."
           : "Попробуйте увеличить бюджет или сократить обязательное время вместе."}
       </p>
-      <button className="secondary-button">Показать, что изменить</button>
+      {onRetry && (
+        <button
+          className="secondary-button"
+          disabled={retrying}
+          onClick={onRetry}
+        >
+          {retrying ? "Запускаем…" : "Пересчитать ещё раз"}
+        </button>
+      )}
     </section>
   );
 }

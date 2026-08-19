@@ -11,6 +11,7 @@ import type {
 import { authRoutes } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { tripRoutes } from "./routes/trips.js";
+import type { InMemoryCollaborationMetrics } from "./observability/collaboration-metrics.js";
 
 export type AppDependencies = {
   readinessCheck: () => Promise<void>;
@@ -23,6 +24,7 @@ export type AppDependencies = {
   allowedOrigin?: string;
   inviteUrl?: (token: string) => string;
   trustProxy?: boolean | number | string | undefined;
+  collaborationMetrics?: InMemoryCollaborationMetrics;
 };
 
 const CODE_BY_STATUS: Record<number, string> = {
@@ -137,6 +139,9 @@ export function buildApp(dependencies: AppDependencies) {
       inviteUrl:
         dependencies.inviteUrl ??
         ((token) => `http://localhost:5173/join/${token}`),
+      ...(dependencies.collaborationMetrics
+        ? { collaborationMetrics: dependencies.collaborationMetrics }
+        : {}),
     });
   if (dependencies.sessions)
     void app.register(authRoutes, {

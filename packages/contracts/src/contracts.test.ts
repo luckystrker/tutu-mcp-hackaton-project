@@ -3,6 +3,8 @@ import {
   ApiErrorSchema,
   CitySchema,
   DestinationResultDtoSchema,
+  ExplainInputSchema,
+  ExplainResponseSchema,
   FinalTripDtoSchema,
   HotelOptionSchema,
   ParticipantPrivateSchema,
@@ -272,6 +274,33 @@ describe("shared contracts", () => {
         type: "unknown",
         payload: {},
       }).success,
+    ).toBe(false);
+  });
+
+  it("does not accept client-supplied explanation facts", () => {
+    expect(
+      ExplainInputSchema.safeParse({
+        type: "why",
+        cityId: ids.city,
+        scoreDelta: 999,
+        privateBudget: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts a useful long explanation up to its explicit limit", () => {
+    const response = {
+      source: "llm",
+      factsVersion: "explanation-facts-v1",
+      facts: { type: "counterfactual", city: null, changes: [] },
+    } as const;
+    expect(
+      ExplainResponseSchema.safeParse({ ...response, text: "я".repeat(201) })
+        .success,
+    ).toBe(true);
+    expect(
+      ExplainResponseSchema.safeParse({ ...response, text: "я".repeat(2001) })
+        .success,
     ).toBe(false);
   });
 

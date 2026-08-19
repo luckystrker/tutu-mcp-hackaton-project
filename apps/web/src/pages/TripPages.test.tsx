@@ -8,6 +8,7 @@ import { AppProviders } from "../app/providers.js";
 import { DEMO_TRIP_IDS, FixtureRendezvousApi } from "../demo/fixtures.js";
 import {
   FinalTripPage,
+  DestinationPage,
   InvitePage,
   LiveRoomPage,
   ShortlistPage,
@@ -113,6 +114,21 @@ describe("core trip pages", () => {
     expect(
       await screen.findByRole("button", { name: "Зафиксировать город" }),
     ).toBeTruthy();
+  });
+
+  it("shows a facts-first explanation on a destination", async () => {
+    const id = DEMO_TRIP_IDS.live;
+    const cityId = "42100000-0000-4000-8000-000000000001";
+    renderPage(
+      `/trips/${id}/cities/${cityId}`,
+      <Route
+        path="/trips/:tripId/cities/:cityId"
+        element={<DestinationPage />}
+      />,
+    );
+    expect(await screen.findByText("Почему так")).toBeTruthy();
+    expect(await screen.findByText(/даёт группе хороший баланс/)).toBeTruthy();
+    expect(screen.getByText(/без AI/)).toBeTruthy();
   });
 });
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   CreateTripResponseSchema,
   FinalTripDtoSchema,
+  ExplainResponseSchema,
   InviteTokenResponseSchema,
   type HotelOption,
   type RouteOption,
@@ -145,12 +146,38 @@ describeDatabase("stage 5 data/API/workflow", () => {
       "suitability",
     ]);
 
+    const explained = await app.inject({
+      method: "POST",
+      url: `/api/trips/${tripId}/explain`,
+      headers: actorHeaders(memberId, "Участник"),
+      payload: { type: "why", cityId: view.destinations[0]!.city.id },
+    });
+    expect(explained.statusCode, explained.body).toBe(200);
+    const explanation = ExplainResponseSchema.parse(explained.json());
+    expect(explanation.source).toBe("template");
+    expect(JSON.stringify(explanation)).not.toContain(memberId);
+
+    const staleExplanation = await app.inject({
+      method: "POST",
+      url: `/api/trips/${tripId}/explain`,
+      headers: actorHeaders(memberId, "Участник"),
+      payload: { type: "why", cityId: randomUUID() },
+    });
+    expect(staleExplanation.statusCode).toBe(404);
+
     const stranger = await app.inject({
       method: "GET",
       url: `/api/trips/${tripId}`,
       headers: actorHeaders(strangerId, "Чужой"),
     });
     expect(stranger.statusCode).toBe(404);
+    const strangerExplanation = await app.inject({
+      method: "POST",
+      url: `/api/trips/${tripId}/explain`,
+      headers: actorHeaders(strangerId, "Чужой"),
+      payload: { type: "why", cityId: view.destinations[0]!.city.id },
+    });
+    expect(strangerExplanation.statusCode).toBe(404);
     const forbidden = await app.inject({
       method: "PUT",
       url: `/api/trips/${tripId}/settings`,

@@ -46,10 +46,26 @@ export interface WorkflowLog {
 
 export interface RecomputeMetrics {
   recordRecomputeLatencyReadyToPublished(milliseconds: number): void;
+  recordWorkflowRun?(metric: {
+    durationMs: number;
+    candidates: number;
+    feasible: number;
+    rejected: number;
+    exploredSolutions: number;
+    degraded: boolean;
+  }): void;
 }
 
 export class InMemoryRecomputeMetrics implements RecomputeMetrics {
   readonly recomputeLatencyReadyToPublished: number[] = [];
+  readonly workflowRuns: Array<{
+    durationMs: number;
+    candidates: number;
+    feasible: number;
+    rejected: number;
+    exploredSolutions: number;
+    degraded: boolean;
+  }> = [];
 
   recordRecomputeLatencyReadyToPublished(milliseconds: number): void {
     this.recomputeLatencyReadyToPublished.push(milliseconds);
@@ -61,6 +77,29 @@ export class InMemoryRecomputeMetrics implements RecomputeMetrics {
       (a, b) => a - b,
     );
     return ordered[Math.ceil(ordered.length * 0.95) - 1]!;
+  }
+
+  recordWorkflowRun(metric: (typeof this.workflowRuns)[number]): void {
+    this.workflowRuns.push({
+      ...metric,
+      durationMs: Math.round(metric.durationMs),
+    });
+  }
+
+  snapshot() {
+    const durations = this.workflowRuns
+      .map(({ durationMs }) => durationMs)
+      .sort((a, b) => a - b);
+    return {
+      runs: this.workflowRuns.length,
+      p95DurationMs:
+        durations[Math.max(0, Math.ceil(durations.length * 0.95) - 1)] ?? 0,
+      candidates: this.workflowRuns.at(-1)?.candidates ?? 0,
+      feasible: this.workflowRuns.at(-1)?.feasible ?? 0,
+      rejected: this.workflowRuns.at(-1)?.rejected ?? 0,
+      exploredSolutions: this.workflowRuns.at(-1)?.exploredSolutions ?? 0,
+      degradedRuns: this.workflowRuns.filter(({ degraded }) => degraded).length,
+    };
   }
 }
 
@@ -263,6 +302,17 @@ export class RecomputeRunner {
       this.metrics.recordRecomputeLatencyReadyToPublished(
         Date.now() - Date.parse(job.queuedAt),
       );
+    this.metrics.recordWorkflowRun?.({
+      durationMs: performance.now() - startedAt,
+      candidates: enrichedFacts.length,
+      feasible: output.allFeasible.length,
+      rejected: output.rejected.length,
+      exploredSolutions: output.allFeasible.reduce(
+        (sum, destination) => sum + destination.groupFrontier.length,
+        0,
+      ),
+      degraded,
+    });
     return { status, destinations: destinations.length };
   }
 
@@ -379,23 +429,35 @@ async function safeAdapterCall<T>(
   signal: AbortSignal,
   call: () => Promise<AdapterResult<T>>,
 ): Promise<AdapterResult<T>> {
+  if (signal.aborted) return failedAdapterResult(tool, signal);
   try {
     return await call();
   } catch (error) {
-    if (signal.aborted) throw error;
-    return {
-      status: "partial",
-      availability: "unknown",
-      data: [],
-      fetchedAt: new Date().toISOString(),
-      failures: [
-        {
-          code: "PROVIDER",
-          tool,
-          retryable: true,
-          message: error instanceof Error ? error.message : "Provider failed",
-        },
-      ],
-    };
+    return failedAdapterResult(tool, signal, error);
   }
+}
+
+function failedAdapterResult<T>(
+  tool: "searchOutbound" | "searchReturn" | "searchHotels",
+  signal: AbortSignal,
+  error?: unknown,
+): AdapterResult<T> {
+  return {
+    status: "partial",
+    availability: "unknown",
+    data: [],
+    fetchedAt: new Date().toISOString(),
+    failures: [
+      {
+        code: signal.aborted ? "TIMEOUT" : "PROVIDER",
+        tool,
+        retryable: true,
+        message: signal.aborted
+          ? "Workflow deadline reached"
+          : error instanceof Error
+            ? error.message
+            : "Provider failed",
+      },
+    ],
+  };
 }

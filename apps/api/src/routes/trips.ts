@@ -2,6 +2,8 @@ import {
   CreateTripInputSchema,
   CreateTripResponseSchema,
   EntityIdSchema,
+  ExplainInputSchema,
+  ExplainResponseSchema,
   FinalizeTripInputSchema,
   FinalTripDtoSchema,
   InviteTokenResponseSchema,
@@ -20,6 +22,7 @@ import { z } from "zod";
 import type { ActorAuthenticator } from "../auth/session-service.js";
 import type { TripService } from "../application/trip-service.js";
 import { createRateLimiter } from "../rate-limit.js";
+import type { InMemoryCollaborationMetrics } from "../observability/collaboration-metrics.js";
 
 const ParamsSchema = z.strictObject({ tripId: EntityIdSchema });
 const ReactionParamsSchema = ParamsSchema.extend({ cityId: EntityIdSchema });
@@ -32,6 +35,7 @@ export const tripRoutes: FastifyPluginAsync<{
   service: TripService;
   authenticator: ActorAuthenticator;
   inviteUrl: (token: string) => string;
+  collaborationMetrics?: InMemoryCollaborationMetrics;
 }> = async (app, options) => {
   const limiter = createRateLimiter({
     windowMs: 60_000,
@@ -81,6 +85,27 @@ export const tripRoutes: FastifyPluginAsync<{
     );
   });
 
+  app.post("/api/trips/:tripId/explain", async (request) => {
+    const { tripId } = ParamsSchema.parse(request.params);
+    return ExplainResponseSchema.parse(
+      await options.service.explain(
+        await options.authenticator.authenticate(request.headers),
+        tripId,
+        ExplainInputSchema.parse(request.body),
+      ),
+    );
+  });
+
+  app.post("/api/trips/:tripId/retry", async (request) => {
+    const { tripId } = ParamsSchema.parse(request.params);
+    return TripViewSchema.parse(
+      await options.service.retryComputation(
+        await options.authenticator.authenticate(request.headers),
+        tripId,
+      ),
+    );
+  });
+
   app.get("/api/trips/:tripId/events", async (request, reply) => {
     const { tripId } = ParamsSchema.parse(request.params);
     const actor = await options.authenticator.authenticate(request.headers);
@@ -95,6 +120,7 @@ export const tripRoutes: FastifyPluginAsync<{
       tripId,
       cursor,
     );
+    options.collaborationMetrics?.connected(cursor > 0);
     reply.hijack();
     reply.raw.writeHead(200, {
       "content-type": "text/event-stream; charset=utf-8",
@@ -106,6 +132,7 @@ export const tripRoutes: FastifyPluginAsync<{
     let lastHeartbeatAt = Date.now();
     request.raw.once("close", () => {
       closed = true;
+      options.collaborationMetrics?.disconnected();
     });
     const writeEvents = (
       events: Awaited<ReturnType<typeof options.service.listEventsAfter>>,

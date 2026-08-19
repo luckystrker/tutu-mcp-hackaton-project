@@ -1,6 +1,7 @@
 import type {
   CreateTripInput,
   CreateTripResponse,
+  ExplainInput,
   ScoringConfig,
   SetReactionInput,
   TripGroupDto,
@@ -14,6 +15,7 @@ import type { Actor } from "./actor.js";
 import { ApplicationError } from "./errors.js";
 import { projectAggregate, projectSolverOutput } from "./projection.js";
 import type { TripRepository } from "../repositories/trip-repository.js";
+import { ExplanationService } from "./explanation-service.js";
 
 export class TripService {
   constructor(
@@ -22,6 +24,10 @@ export class TripService {
       string,
       { id: string; name: string; country: string }
     >,
+    private readonly explanations = new ExplanationService(
+      repository,
+      publicCities,
+    ),
   ) {}
 
   async createTrip(
@@ -85,6 +91,11 @@ export class TripService {
     input: UpdateTripSettingsInput,
   ): Promise<TripGroupDto | TripOrganizerDto> {
     await this.repository.updateSettings(actor.userId, tripId, input);
+    return this.getTrip(actor, tripId);
+  }
+
+  async retryComputation(actor: Actor, tripId: string) {
+    await this.repository.retryComputation(actor.userId, tripId);
     return this.getTrip(actor, tripId);
   }
 
@@ -163,6 +174,10 @@ export class TripService {
 
   async listEventsAfter(actor: Actor, tripId: string, afterId: number) {
     return this.repository.listEventsAfter(actor.userId, tripId, afterId);
+  }
+
+  async explain(actor: Actor, tripId: string, input: ExplainInput) {
+    return this.explanations.explain(actor.userId, tripId, input);
   }
 
   private requireKnownCities(cityIds: readonly string[]): void {

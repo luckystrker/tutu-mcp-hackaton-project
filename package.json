@@ -19,6 +19,7 @@
     "lint": "eslint . && prettier --check . && node tools/check-boundaries.mjs",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "secrets:scan": "node tools/check-secrets.mjs",
     "test:watch": "vitest",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "^1.62.1",
     "@types/node": "26.2.0",
     "concurrently": "10.0.5",
     "dotenv": "17.4.2",

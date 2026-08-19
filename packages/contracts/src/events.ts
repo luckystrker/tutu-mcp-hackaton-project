@@ -48,7 +48,10 @@ export const TripEventSchema = z.discriminatedUnion("type", [
   }),
   EventBaseSchema.extend({
     type: z.literal("computation_finished"),
-    payload: z.strictObject({ degraded: z.boolean() }),
+    payload: z.strictObject({
+      degraded: z.boolean(),
+      preservedPrevious: z.boolean().optional(),
+    }),
   }),
   EventBaseSchema.extend({
     type: z.literal("reaction_added"),

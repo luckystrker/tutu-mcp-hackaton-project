@@ -1,36 +1,43 @@
-import { describe, expect, it } from "vitest";
-import { parseSseFrame } from "./api.js";
+// @vitest-environment jsdom
 
-const event = {
-  id: "42",
-  tripId: "40000000-0000-4000-8000-000000000001",
-  revision: 3,
-  occurredAt: "2026-08-19T12:00:00.000Z",
-  type: "participant_ready",
-  payload: {
-    participantId: "41000000-0000-4000-8000-000000000001",
-    readyCount: 2,
-  },
-};
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { HttpRendezvousApi } from "./api.js";
 
-describe("SSE wire parser", () => {
-  it("parses a shared-contract event and ignores heartbeat comments", () => {
-    expect(
-      parseSseFrame(
-        `id: 42\nevent: participant_ready\ndata: ${JSON.stringify(event)}`,
-      ),
-    ).toEqual(event);
-    expect(parseSseFrame(": heartbeat 123")).toBeNull();
-  });
+afterEach(() => vi.unstubAllGlobals());
 
-  it("rejects payloads outside the public event projection", () => {
-    expect(() =>
-      parseSseFrame(
-        `data: ${JSON.stringify({
-          ...event,
-          payload: { ...event.payload, maxBudget: 10000 },
-        })}`,
-      ),
-    ).toThrow();
+describe("HTTP rendezvous client", () => {
+  it("does not send a JSON content type for a bodyless POST", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          token: "a".repeat(43),
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          user: {
+            id: "10000000-0000-4000-8000-000000000099",
+            displayName: "Local user",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          inviteToken: "abcdefghijklmnopqrstuv",
+          startAppUrl: "http://localhost:5173/join/abcdefghijklmnopqrstuv",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new HttpRendezvousApi("", {
+      id: "10000000-0000-4000-8000-000000000099",
+      name: "Local user",
+    });
+
+    await api.getInvite("10000000-0000-4000-8000-000000000001");
+
+    const [, request] = fetchMock.mock.calls[1]!;
+    const headers = new Headers(request?.headers);
+    expect(request?.method).toBe("POST");
+    expect(request?.body).toBeUndefined();
+    expect(headers.has("content-type")).toBe(false);
+    expect(headers.get("authorization")).toMatch(/^Bearer /);
   });
 });

@@ -113,20 +113,49 @@ describe("recompute workflow", () => {
     expect(repository.persistIfCurrent).not.toHaveBeenCalled();
     expect(repository.markJobStale).toHaveBeenCalledWith(job);
   });
+
+  it("publishes a degraded partial result when the workflow deadline expires", async () => {
+    const repository = repositoryFixture();
+    const waitForAbort = <T>(signal: AbortSignal) =>
+      new Promise<AdapterResult<T>>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      });
+    const adapter: TutuTransportAdapter = {
+      searchOutbound: (_input, signal) => waitForAbort<RouteOption>(signal),
+      searchReturn: (_input, signal) => waitForAbort<RouteOption>(signal),
+      searchHotels: (_input, signal) => waitForAbort<HotelOption>(signal),
+    };
+
+    await expect(
+      runnerFixture(repository, adapter, undefined, 5).run(job),
+    ).resolves.toEqual({ status: "PERSISTED", destinations: 0 });
+    expect(repository.persistIfCurrent).toHaveBeenCalledWith(
+      job,
+      expect.any(Object),
+      [],
+      true,
+      "geo-v1.1.0",
+    );
+  });
 });
 
 function runnerFixture(
   repository: RecomputeRepository,
   adapter: TutuTransportAdapter,
-  generator: CandidateGenerator = createCandidateGenerator(CITY_CATALOG),
+  generator: CandidateGenerator | undefined = createCandidateGenerator(
+    CITY_CATALOG,
+  ),
+  deadlineMs = 5_000,
 ) {
   return new RecomputeRunner(
     repository,
-    generator,
+    generator ?? createCandidateGenerator(CITY_CATALOG),
     adapter,
     CITY_CATALOG,
     log,
-    5_000,
+    deadlineMs,
   );
 }
 

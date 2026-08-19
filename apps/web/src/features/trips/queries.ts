@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import type {
   ScoringConfig,
+  ExplainInput,
   SetReactionInput,
   UpdatePreferencesInput,
 } from "@rendezvous/contracts";
@@ -11,8 +12,22 @@ export const tripKeys = {
   all: ["trips"] as const,
   detail: (id: string) => ["trip", id] as const,
   final: (id: string) => ["trip-final", id] as const,
+  explanation: (id: string, input: ExplainInput) =>
+    ["trip-explanation", id, input] as const,
   invite: (id: string) => ["invite", id] as const,
 };
+
+export function useExplanation(id: string, input: ExplainInput | undefined) {
+  const api = useApi();
+  return useQuery({
+    queryKey: input
+      ? tripKeys.explanation(id, input)
+      : (["trip-explanation", id, "disabled"] as const),
+    queryFn: () => api.explain(id, input!),
+    enabled: Boolean(input),
+    staleTime: 60_000,
+  });
+}
 
 export function useFinalTrip(id: string) {
   const api = useApi();
@@ -67,6 +82,15 @@ export function usePreferencesMutation(id: string) {
   return useMutation({
     mutationFn: (input: UpdatePreferencesInput) =>
       api.updateMyPreferences(id, input),
+    onSuccess: (view) => client.setQueryData(tripKeys.detail(id), view),
+  });
+}
+
+export function useRetryComputationMutation(id: string) {
+  const api = useApi();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.retryComputation(id),
     onSuccess: (view) => client.setQueryData(tripKeys.detail(id), view),
   });
 }
