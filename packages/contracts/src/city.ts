@@ -13,11 +13,29 @@ export const DestinationTagSchema = z.enum([
 export const CitySchema = z.strictObject({
   id: EntityIdSchema,
   name: NonEmptyTextSchema,
-  country: z.string().trim().length(2),
+  country: z
+    .string()
+    .trim()
+    .regex(/^[A-Z]{2}$/),
   lat: z.number().min(-90).max(90),
   lon: z.number().min(-180).max(180),
-  hubScore: z.number().min(0).max(100),
-  tags: z.array(DestinationTagSchema),
+  tz: z.string().refine(
+    (timeZone) => {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Expected a valid IANA timezone" },
+  ),
+  hubScore: z.number().int().min(0).max(100),
+  tags: z
+    .array(DestinationTagSchema)
+    .refine((tags) => new Set(tags).size === tags.length, {
+      message: "City tags must be unique",
+    }),
 });
 
 export const PublicCitySchema = CitySchema.pick({

@@ -28,6 +28,7 @@ const city = {
   country: "RU",
   lat: 57.6261,
   lon: 39.8845,
+  tz: "Europe/Moscow",
   hubScore: 75,
   tags: ["history" as const],
 };
@@ -102,6 +103,15 @@ describe("shared contracts", () => {
   it("parses a city and rejects invalid coordinates", () => {
     expect(CitySchema.parse(city)).toEqual(city);
     expect(CitySchema.safeParse({ ...city, lat: 100 }).success).toBe(false);
+    expect(
+      CitySchema.safeParse({ ...city, tz: "Europe/Nowhere" }).success,
+    ).toBe(false);
+    expect(CitySchema.safeParse({ ...city, country: "rus" }).success).toBe(
+      false,
+    );
+    expect(
+      CitySchema.safeParse({ ...city, tags: ["history", "history"] }).success,
+    ).toBe(false);
   });
 
   it("allows only the soft preference vocabulary", () => {

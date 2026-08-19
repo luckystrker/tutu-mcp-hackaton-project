@@ -14,7 +14,13 @@ export const SoftPreferencesSchema = z.strictObject({
   preferDirect: z.boolean().optional(),
   preferMorningArrival: z.boolean().optional(),
   maxTravelHoursPreferred: z.number().positive().max(168).optional(),
-  destinationTags: z.array(DestinationTagSchema).max(6).optional(),
+  destinationTags: z
+    .array(DestinationTagSchema)
+    .max(6)
+    .refine((tags) => new Set(tags).size === tags.length, {
+      message: "Destination tags must be unique",
+    })
+    .optional(),
 });
 
 export const ParticipantPrivateSchema = z.strictObject({

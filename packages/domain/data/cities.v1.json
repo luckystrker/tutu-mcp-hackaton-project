@@ -1,0 +1,1102 @@
+[
+  {
+    "id": "10000000-0000-4000-8000-000000000001",
+    "name": "Москва",
+    "country": "RU",
+    "lat": 55.7558,
+    "lon": 37.6173,
+    "tz": "Europe/Moscow",
+    "hubScore": 100,
+    "tags": ["history", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000002",
+    "name": "Санкт-Петербург",
+    "country": "RU",
+    "lat": 59.9343,
+    "lon": 30.3351,
+    "tz": "Europe/Moscow",
+    "hubScore": 98,
+    "tags": ["history", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000003",
+    "name": "Новосибирск",
+    "country": "RU",
+    "lat": 55.0084,
+    "lon": 82.9357,
+    "tz": "Asia/Novosibirsk",
+    "hubScore": 92,
+    "tags": ["food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000004",
+    "name": "Екатеринбург",
+    "country": "RU",
+    "lat": 56.8389,
+    "lon": 60.6057,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 94,
+    "tags": ["history", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000005",
+    "name": "Казань",
+    "country": "RU",
+    "lat": 55.7961,
+    "lon": 49.1064,
+    "tz": "Europe/Moscow",
+    "hubScore": 91,
+    "tags": ["history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000006",
+    "name": "Нижний Новгород",
+    "country": "RU",
+    "lat": 56.2965,
+    "lon": 43.9361,
+    "tz": "Europe/Moscow",
+    "hubScore": 90,
+    "tags": ["history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000007",
+    "name": "Челябинск",
+    "country": "RU",
+    "lat": 55.1644,
+    "lon": 61.4368,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 84,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000008",
+    "name": "Красноярск",
+    "country": "RU",
+    "lat": 56.0153,
+    "lon": 92.8932,
+    "tz": "Asia/Krasnoyarsk",
+    "hubScore": 88,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000009",
+    "name": "Самара",
+    "country": "RU",
+    "lat": 53.1959,
+    "lon": 50.1002,
+    "tz": "Europe/Samara",
+    "hubScore": 88,
+    "tags": ["history", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000010",
+    "name": "Уфа",
+    "country": "RU",
+    "lat": 54.7388,
+    "lon": 55.9721,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 86,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000011",
+    "name": "Ростов-на-Дону",
+    "country": "RU",
+    "lat": 47.2357,
+    "lon": 39.7015,
+    "tz": "Europe/Moscow",
+    "hubScore": 89,
+    "tags": ["food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000012",
+    "name": "Омск",
+    "country": "RU",
+    "lat": 54.9885,
+    "lon": 73.3242,
+    "tz": "Asia/Omsk",
+    "hubScore": 84,
+    "tags": ["history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000013",
+    "name": "Краснодар",
+    "country": "RU",
+    "lat": 45.0355,
+    "lon": 38.9753,
+    "tz": "Europe/Moscow",
+    "hubScore": 88,
+    "tags": ["food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000014",
+    "name": "Воронеж",
+    "country": "RU",
+    "lat": 51.6608,
+    "lon": 39.2003,
+    "tz": "Europe/Moscow",
+    "hubScore": 83,
+    "tags": ["history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000015",
+    "name": "Пермь",
+    "country": "RU",
+    "lat": 58.0105,
+    "lon": 56.2502,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 85,
+    "tags": ["nature", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000016",
+    "name": "Волгоград",
+    "country": "RU",
+    "lat": 48.708,
+    "lon": 44.5133,
+    "tz": "Europe/Volgograd",
+    "hubScore": 82,
+    "tags": ["history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000017",
+    "name": "Саратов",
+    "country": "RU",
+    "lat": 51.5336,
+    "lon": 46.0343,
+    "tz": "Europe/Saratov",
+    "hubScore": 80,
+    "tags": ["history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000018",
+    "name": "Тюмень",
+    "country": "RU",
+    "lat": 57.1522,
+    "lon": 65.5272,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 85,
+    "tags": ["food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000019",
+    "name": "Тольятти",
+    "country": "RU",
+    "lat": 53.5078,
+    "lon": 49.4204,
+    "tz": "Europe/Samara",
+    "hubScore": 68,
+    "tags": ["nature"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000020",
+    "name": "Ижевск",
+    "country": "RU",
+    "lat": 56.8527,
+    "lon": 53.2115,
+    "tz": "Europe/Samara",
+    "hubScore": 73,
+    "tags": ["history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000021",
+    "name": "Барнаул",
+    "country": "RU",
+    "lat": 53.3474,
+    "lon": 83.7784,
+    "tz": "Asia/Barnaul",
+    "hubScore": 76,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000022",
+    "name": "Ульяновск",
+    "country": "RU",
+    "lat": 54.3142,
+    "lon": 48.4031,
+    "tz": "Europe/Ulyanovsk",
+    "hubScore": 72,
+    "tags": ["history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000023",
+    "name": "Иркутск",
+    "country": "RU",
+    "lat": 52.2864,
+    "lon": 104.2807,
+    "tz": "Asia/Irkutsk",
+    "hubScore": 86,
+    "tags": ["nature", "history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000024",
+    "name": "Хабаровск",
+    "country": "RU",
+    "lat": 48.4802,
+    "lon": 135.0719,
+    "tz": "Asia/Vladivostok",
+    "hubScore": 86,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000025",
+    "name": "Ярославль",
+    "country": "RU",
+    "lat": 57.6261,
+    "lon": 39.8845,
+    "tz": "Europe/Moscow",
+    "hubScore": 82,
+    "tags": ["quiet", "history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000026",
+    "name": "Владивосток",
+    "country": "RU",
+    "lat": 43.1155,
+    "lon": 131.8855,
+    "tz": "Asia/Vladivostok",
+    "hubScore": 87,
+    "tags": ["nature", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000027",
+    "name": "Махачкала",
+    "country": "RU",
+    "lat": 42.9849,
+    "lon": 47.5047,
+    "tz": "Europe/Moscow",
+    "hubScore": 78,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000028",
+    "name": "Томск",
+    "country": "RU",
+    "lat": 56.501,
+    "lon": 84.9925,
+    "tz": "Asia/Tomsk",
+    "hubScore": 76,
+    "tags": ["quiet", "history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000029",
+    "name": "Оренбург",
+    "country": "RU",
+    "lat": 51.7682,
+    "lon": 55.0969,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 75,
+    "tags": ["history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000030",
+    "name": "Кемерово",
+    "country": "RU",
+    "lat": 55.3549,
+    "lon": 86.0873,
+    "tz": "Asia/Novokuznetsk",
+    "hubScore": 74,
+    "tags": ["nature"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000031",
+    "name": "Новокузнецк",
+    "country": "RU",
+    "lat": 53.7596,
+    "lon": 87.1216,
+    "tz": "Asia/Novokuznetsk",
+    "hubScore": 71,
+    "tags": ["nature"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000032",
+    "name": "Рязань",
+    "country": "RU",
+    "lat": 54.6095,
+    "lon": 39.7126,
+    "tz": "Europe/Moscow",
+    "hubScore": 74,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000033",
+    "name": "Набережные Челны",
+    "country": "RU",
+    "lat": 55.7436,
+    "lon": 52.3958,
+    "tz": "Europe/Moscow",
+    "hubScore": 67,
+    "tags": ["food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000034",
+    "name": "Астрахань",
+    "country": "RU",
+    "lat": 46.3479,
+    "lon": 48.0408,
+    "tz": "Europe/Astrakhan",
+    "hubScore": 76,
+    "tags": ["nature", "food", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000035",
+    "name": "Пенза",
+    "country": "RU",
+    "lat": 53.195,
+    "lon": 45.0183,
+    "tz": "Europe/Moscow",
+    "hubScore": 70,
+    "tags": ["quiet", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000036",
+    "name": "Липецк",
+    "country": "RU",
+    "lat": 52.6122,
+    "lon": 39.5981,
+    "tz": "Europe/Moscow",
+    "hubScore": 67,
+    "tags": ["quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000037",
+    "name": "Киров",
+    "country": "RU",
+    "lat": 58.6035,
+    "lon": 49.6679,
+    "tz": "Europe/Kirov",
+    "hubScore": 71,
+    "tags": ["quiet", "nature"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000038",
+    "name": "Чебоксары",
+    "country": "RU",
+    "lat": 56.1439,
+    "lon": 47.2489,
+    "tz": "Europe/Moscow",
+    "hubScore": 70,
+    "tags": ["quiet", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000039",
+    "name": "Калининград",
+    "country": "RU",
+    "lat": 54.7104,
+    "lon": 20.4522,
+    "tz": "Europe/Kaliningrad",
+    "hubScore": 82,
+    "tags": ["history", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000040",
+    "name": "Тула",
+    "country": "RU",
+    "lat": 54.1931,
+    "lon": 37.6173,
+    "tz": "Europe/Moscow",
+    "hubScore": 74,
+    "tags": ["history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000041",
+    "name": "Курск",
+    "country": "RU",
+    "lat": 51.7304,
+    "lon": 36.1926,
+    "tz": "Europe/Moscow",
+    "hubScore": 68,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000042",
+    "name": "Ставрополь",
+    "country": "RU",
+    "lat": 45.0428,
+    "lon": 41.9734,
+    "tz": "Europe/Moscow",
+    "hubScore": 73,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000043",
+    "name": "Сочи",
+    "country": "RU",
+    "lat": 43.6028,
+    "lon": 39.7342,
+    "tz": "Europe/Moscow",
+    "hubScore": 90,
+    "tags": ["nature", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000044",
+    "name": "Тверь",
+    "country": "RU",
+    "lat": 56.8587,
+    "lon": 35.9176,
+    "tz": "Europe/Moscow",
+    "hubScore": 75,
+    "tags": ["quiet", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000045",
+    "name": "Магнитогорск",
+    "country": "RU",
+    "lat": 53.4072,
+    "lon": 58.9791,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 68,
+    "tags": ["nature"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000046",
+    "name": "Иваново",
+    "country": "RU",
+    "lat": 57.0003,
+    "lon": 40.9739,
+    "tz": "Europe/Moscow",
+    "hubScore": 67,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000047",
+    "name": "Брянск",
+    "country": "RU",
+    "lat": 53.2521,
+    "lon": 34.3717,
+    "tz": "Europe/Moscow",
+    "hubScore": 69,
+    "tags": ["history", "nature"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000048",
+    "name": "Белгород",
+    "country": "RU",
+    "lat": 50.5997,
+    "lon": 36.5983,
+    "tz": "Europe/Moscow",
+    "hubScore": 67,
+    "tags": ["quiet", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000049",
+    "name": "Сургут",
+    "country": "RU",
+    "lat": 61.254,
+    "lon": 73.3962,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 80,
+    "tags": ["nature"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000050",
+    "name": "Владимир",
+    "country": "RU",
+    "lat": 56.1291,
+    "lon": 40.407,
+    "tz": "Europe/Moscow",
+    "hubScore": 75,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000051",
+    "name": "Архангельск",
+    "country": "RU",
+    "lat": 64.5399,
+    "lon": 40.5158,
+    "tz": "Europe/Moscow",
+    "hubScore": 76,
+    "tags": ["nature", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000052",
+    "name": "Чита",
+    "country": "RU",
+    "lat": 52.034,
+    "lon": 113.4994,
+    "tz": "Asia/Chita",
+    "hubScore": 74,
+    "tags": ["nature", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000053",
+    "name": "Калуга",
+    "country": "RU",
+    "lat": 54.507,
+    "lon": 36.2523,
+    "tz": "Europe/Moscow",
+    "hubScore": 69,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000054",
+    "name": "Смоленск",
+    "country": "RU",
+    "lat": 54.7903,
+    "lon": 32.0504,
+    "tz": "Europe/Moscow",
+    "hubScore": 71,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000055",
+    "name": "Волжский",
+    "country": "RU",
+    "lat": 48.7858,
+    "lon": 44.7797,
+    "tz": "Europe/Volgograd",
+    "hubScore": 55,
+    "tags": ["quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000056",
+    "name": "Саранск",
+    "country": "RU",
+    "lat": 54.1874,
+    "lon": 45.1839,
+    "tz": "Europe/Moscow",
+    "hubScore": 68,
+    "tags": ["quiet", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000057",
+    "name": "Череповец",
+    "country": "RU",
+    "lat": 59.1269,
+    "lon": 37.9097,
+    "tz": "Europe/Moscow",
+    "hubScore": 65,
+    "tags": ["nature"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000058",
+    "name": "Вологда",
+    "country": "RU",
+    "lat": 59.2205,
+    "lon": 39.8915,
+    "tz": "Europe/Moscow",
+    "hubScore": 70,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000059",
+    "name": "Якутск",
+    "country": "RU",
+    "lat": 62.0355,
+    "lon": 129.6755,
+    "tz": "Asia/Yakutsk",
+    "hubScore": 76,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000060",
+    "name": "Владикавказ",
+    "country": "RU",
+    "lat": 43.0252,
+    "lon": 44.6819,
+    "tz": "Europe/Moscow",
+    "hubScore": 69,
+    "tags": ["nature", "food", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000061",
+    "name": "Мурманск",
+    "country": "RU",
+    "lat": 68.9585,
+    "lon": 33.0827,
+    "tz": "Europe/Moscow",
+    "hubScore": 75,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000062",
+    "name": "Петрозаводск",
+    "country": "RU",
+    "lat": 61.7782,
+    "lon": 34.364,
+    "tz": "Europe/Moscow",
+    "hubScore": 72,
+    "tags": ["nature", "quiet", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000063",
+    "name": "Кострома",
+    "country": "RU",
+    "lat": 57.7679,
+    "lon": 40.9269,
+    "tz": "Europe/Moscow",
+    "hubScore": 69,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000064",
+    "name": "Нижневартовск",
+    "country": "RU",
+    "lat": 60.9397,
+    "lon": 76.5696,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 72,
+    "tags": ["nature"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000065",
+    "name": "Йошкар-Ола",
+    "country": "RU",
+    "lat": 56.6344,
+    "lon": 47.8999,
+    "tz": "Europe/Moscow",
+    "hubScore": 64,
+    "tags": ["quiet", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000066",
+    "name": "Новороссийск",
+    "country": "RU",
+    "lat": 44.7239,
+    "lon": 37.7689,
+    "tz": "Europe/Moscow",
+    "hubScore": 73,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000067",
+    "name": "Таганрог",
+    "country": "RU",
+    "lat": 47.2362,
+    "lon": 38.8969,
+    "tz": "Europe/Moscow",
+    "hubScore": 62,
+    "tags": ["history", "food", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000068",
+    "name": "Сыктывкар",
+    "country": "RU",
+    "lat": 61.6688,
+    "lon": 50.8353,
+    "tz": "Europe/Moscow",
+    "hubScore": 69,
+    "tags": ["nature", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000069",
+    "name": "Нальчик",
+    "country": "RU",
+    "lat": 43.4846,
+    "lon": 43.6071,
+    "tz": "Europe/Moscow",
+    "hubScore": 66,
+    "tags": ["nature", "food", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000070",
+    "name": "Шахты",
+    "country": "RU",
+    "lat": 47.7085,
+    "lon": 40.2158,
+    "tz": "Europe/Moscow",
+    "hubScore": 50,
+    "tags": ["quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000071",
+    "name": "Дзержинск",
+    "country": "RU",
+    "lat": 56.2389,
+    "lon": 43.4616,
+    "tz": "Europe/Moscow",
+    "hubScore": 57,
+    "tags": ["quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000072",
+    "name": "Орск",
+    "country": "RU",
+    "lat": 51.2293,
+    "lon": 58.4752,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 62,
+    "tags": ["nature", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000073",
+    "name": "Грозный",
+    "country": "RU",
+    "lat": 43.3178,
+    "lon": 45.6982,
+    "tz": "Europe/Moscow",
+    "hubScore": 71,
+    "tags": ["history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000074",
+    "name": "Курган",
+    "country": "RU",
+    "lat": 55.441,
+    "lon": 65.3411,
+    "tz": "Asia/Yekaterinburg",
+    "hubScore": 65,
+    "tags": ["quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000075",
+    "name": "Псков",
+    "country": "RU",
+    "lat": 57.8136,
+    "lon": 28.3496,
+    "tz": "Europe/Moscow",
+    "hubScore": 70,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000076",
+    "name": "Великий Новгород",
+    "country": "RU",
+    "lat": 58.5256,
+    "lon": 31.2742,
+    "tz": "Europe/Moscow",
+    "hubScore": 72,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000077",
+    "name": "Благовещенск",
+    "country": "RU",
+    "lat": 50.2907,
+    "lon": 127.5272,
+    "tz": "Asia/Yakutsk",
+    "hubScore": 70,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000078",
+    "name": "Рыбинск",
+    "country": "RU",
+    "lat": 58.0484,
+    "lon": 38.8584,
+    "tz": "Europe/Moscow",
+    "hubScore": 61,
+    "tags": ["nature", "history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000079",
+    "name": "Абакан",
+    "country": "RU",
+    "lat": 53.7209,
+    "lon": 91.4424,
+    "tz": "Asia/Krasnoyarsk",
+    "hubScore": 68,
+    "tags": ["nature", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000080",
+    "name": "Петропавловск-Камчатский",
+    "country": "RU",
+    "lat": 53.037,
+    "lon": 158.6559,
+    "tz": "Asia/Kamchatka",
+    "hubScore": 69,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000081",
+    "name": "Южно-Сахалинск",
+    "country": "RU",
+    "lat": 46.9591,
+    "lon": 142.738,
+    "tz": "Asia/Sakhalin",
+    "hubScore": 72,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000082",
+    "name": "Магадан",
+    "country": "RU",
+    "lat": 59.5682,
+    "lon": 150.8085,
+    "tz": "Asia/Magadan",
+    "hubScore": 65,
+    "tags": ["nature", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000083",
+    "name": "Элиста",
+    "country": "RU",
+    "lat": 46.3083,
+    "lon": 44.2702,
+    "tz": "Europe/Moscow",
+    "hubScore": 58,
+    "tags": ["history", "quiet", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000084",
+    "name": "Дербент",
+    "country": "RU",
+    "lat": 42.0578,
+    "lon": 48.2888,
+    "tz": "Europe/Moscow",
+    "hubScore": 62,
+    "tags": ["history", "food", "small-city"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000085",
+    "name": "Кисловодск",
+    "country": "RU",
+    "lat": 43.9052,
+    "lon": 42.7168,
+    "tz": "Europe/Moscow",
+    "hubScore": 67,
+    "tags": ["nature", "quiet", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000086",
+    "name": "Пятигорск",
+    "country": "RU",
+    "lat": 44.0486,
+    "lon": 43.0594,
+    "tz": "Europe/Moscow",
+    "hubScore": 68,
+    "tags": ["nature", "history", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000087",
+    "name": "Минеральные Воды",
+    "country": "RU",
+    "lat": 44.2103,
+    "lon": 43.1353,
+    "tz": "Europe/Moscow",
+    "hubScore": 82,
+    "tags": ["nature", "small-city"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000088",
+    "name": "Анапа",
+    "country": "RU",
+    "lat": 44.8951,
+    "lon": 37.3163,
+    "tz": "Europe/Moscow",
+    "hubScore": 75,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000089",
+    "name": "Геленджик",
+    "country": "RU",
+    "lat": 44.561,
+    "lon": 38.077,
+    "tz": "Europe/Moscow",
+    "hubScore": 70,
+    "tags": ["nature", "food"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000090",
+    "name": "Великий Устюг",
+    "country": "RU",
+    "lat": 60.7603,
+    "lon": 46.3054,
+    "tz": "Europe/Moscow",
+    "hubScore": 45,
+    "tags": ["history", "quiet", "small-city"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000091",
+    "name": "Суздаль",
+    "country": "RU",
+    "lat": 56.4196,
+    "lon": 40.4495,
+    "tz": "Europe/Moscow",
+    "hubScore": 48,
+    "tags": ["history", "quiet", "small-city"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000092",
+    "name": "Ростов Великий",
+    "country": "RU",
+    "lat": 57.1859,
+    "lon": 39.4145,
+    "tz": "Europe/Moscow",
+    "hubScore": 50,
+    "tags": ["history", "quiet", "small-city"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000093",
+    "name": "Плёс",
+    "country": "RU",
+    "lat": 57.4606,
+    "lon": 41.5123,
+    "tz": "Europe/Moscow",
+    "hubScore": 32,
+    "tags": ["nature", "quiet", "small-city"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000094",
+    "name": "Сортавала",
+    "country": "RU",
+    "lat": 61.7032,
+    "lon": 30.6918,
+    "tz": "Europe/Moscow",
+    "hubScore": 52,
+    "tags": ["nature", "quiet", "small-city"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000095",
+    "name": "Выборг",
+    "country": "RU",
+    "lat": 60.7131,
+    "lon": 28.732,
+    "tz": "Europe/Moscow",
+    "hubScore": 65,
+    "tags": ["history", "nature", "small-city"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000096",
+    "name": "Минск",
+    "country": "BY",
+    "lat": 53.9006,
+    "lon": 27.559,
+    "tz": "Europe/Minsk",
+    "hubScore": 91,
+    "tags": ["history", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000097",
+    "name": "Брест",
+    "country": "BY",
+    "lat": 52.0976,
+    "lon": 23.7341,
+    "tz": "Europe/Minsk",
+    "hubScore": 72,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000098",
+    "name": "Гомель",
+    "country": "BY",
+    "lat": 52.4345,
+    "lon": 30.9754,
+    "tz": "Europe/Minsk",
+    "hubScore": 67,
+    "tags": ["quiet", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000099",
+    "name": "Алматы",
+    "country": "KZ",
+    "lat": 43.2389,
+    "lon": 76.8897,
+    "tz": "Asia/Almaty",
+    "hubScore": 94,
+    "tags": ["nature", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000100",
+    "name": "Астана",
+    "country": "KZ",
+    "lat": 51.1694,
+    "lon": 71.4491,
+    "tz": "Asia/Almaty",
+    "hubScore": 91,
+    "tags": ["food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000101",
+    "name": "Караганда",
+    "country": "KZ",
+    "lat": 49.8064,
+    "lon": 73.0855,
+    "tz": "Asia/Almaty",
+    "hubScore": 75,
+    "tags": ["history", "quiet"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000102",
+    "name": "Шымкент",
+    "country": "KZ",
+    "lat": 42.3417,
+    "lon": 69.5901,
+    "tz": "Asia/Almaty",
+    "hubScore": 78,
+    "tags": ["food", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000103",
+    "name": "Тбилиси",
+    "country": "GE",
+    "lat": 41.7151,
+    "lon": 44.8271,
+    "tz": "Asia/Tbilisi",
+    "hubScore": 90,
+    "tags": ["history", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000104",
+    "name": "Батуми",
+    "country": "GE",
+    "lat": 41.6168,
+    "lon": 41.6367,
+    "tz": "Asia/Tbilisi",
+    "hubScore": 78,
+    "tags": ["nature", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000105",
+    "name": "Ереван",
+    "country": "AM",
+    "lat": 40.1872,
+    "lon": 44.5152,
+    "tz": "Asia/Yerevan",
+    "hubScore": 88,
+    "tags": ["history", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000106",
+    "name": "Баку",
+    "country": "AZ",
+    "lat": 40.4093,
+    "lon": 49.8671,
+    "tz": "Asia/Baku",
+    "hubScore": 90,
+    "tags": ["history", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000107",
+    "name": "Ташкент",
+    "country": "UZ",
+    "lat": 41.2995,
+    "lon": 69.2401,
+    "tz": "Asia/Tashkent",
+    "hubScore": 92,
+    "tags": ["history", "food", "nightlife"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000108",
+    "name": "Бишкек",
+    "country": "KG",
+    "lat": 42.8746,
+    "lon": 74.5698,
+    "tz": "Asia/Bishkek",
+    "hubScore": 84,
+    "tags": ["nature", "food", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000109",
+    "name": "Душанбе",
+    "country": "TJ",
+    "lat": 38.5598,
+    "lon": 68.787,
+    "tz": "Asia/Dushanbe",
+    "hubScore": 79,
+    "tags": ["nature", "food", "history"]
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000110",
+    "name": "Кишинёв",
+    "country": "MD",
+    "lat": 47.0105,
+    "lon": 28.8638,
+    "tz": "Europe/Chisinau",
+    "hubScore": 80,
+    "tags": ["history", "food", "nightlife"]
+  }
+]

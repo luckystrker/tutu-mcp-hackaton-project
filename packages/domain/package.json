@@ -5,15 +5,18 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./dist/src/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/src/index.js"
     }
   },
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false",
+    "validate:catalog": "vitest run --root ../.. packages/domain/src/city/catalog.test.ts"
   },
   "dependencies": {
-    "@rendezvous/contracts": "0.1.0"
+    "@rendezvous/contracts": "0.1.0",
+    "zod": "4.4.3"
   }
 }
