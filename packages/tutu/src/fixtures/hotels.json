@@ -1,0 +1,20 @@
+{
+  "hotels": [
+    {
+      "hotel_id": "hotel-42",
+      "name": "Fixture Hotel",
+      "rating": 8.7,
+      "best_offer": {
+        "price": { "amount": 6420.5, "currency": "RUB" },
+        "checkout_url": "https://hotel.tutu.ru/checkout/fixture",
+        "offerpack_hash": "redacted"
+      }
+    },
+    {
+      "hotel_id": "hotel-without-price",
+      "name": "Price on request",
+      "best_offer": null
+    }
+  ],
+  "meta": { "page": 1 }
+}

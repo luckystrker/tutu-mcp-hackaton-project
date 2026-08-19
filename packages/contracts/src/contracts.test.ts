@@ -245,4 +245,59 @@ describe("shared contracts", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("accepts kopecks but rejects money with sub-kopeck precision", () => {
+    expect(
+      RouteOptionSchema.safeParse({
+        id: "route-with-kopecks",
+        originCityId: ids.city,
+        destinationCityId: ids.city,
+        mode: "train",
+        departureAt: now,
+        arrivalAt: "2026-09-04T16:00:00+07:00",
+        durationMinutes: 240,
+        price: { amount: 1529.36, currency: "RUB" },
+        source: "tutu",
+      }).success,
+    ).toBe(true);
+    expect(
+      RouteOptionSchema.safeParse({
+        id: "route-with-sub-kopecks",
+        originCityId: ids.city,
+        destinationCityId: ids.city,
+        mode: "train",
+        departureAt: now,
+        arrivalAt: "2026-09-04T16:00:00+07:00",
+        durationMinutes: 240,
+        price: { amount: 1.234, currency: "RUB" },
+        source: "tutu",
+      }).success,
+    ).toBe(false);
+    expect(
+      RouteOptionSchema.safeParse({
+        id: "route-with-large-amount",
+        originCityId: ids.city,
+        destinationCityId: ids.city,
+        mode: "train",
+        departureAt: now,
+        arrivalAt: "2026-09-04T16:00:00+07:00",
+        durationMinutes: 240,
+        price: { amount: 9673913.55, currency: "RUB" },
+        source: "tutu",
+      }).success,
+    ).toBe(true);
+    expect(
+      RouteOptionSchema.safeParse({
+        id: "route-with-large-sub-kopecks",
+        originCityId: ids.city,
+        destinationCityId: ids.city,
+        mode: "train",
+        departureAt: now,
+        arrivalAt: "2026-09-04T16:00:00+07:00",
+        durationMinutes: 240,
+        price: { amount: 9673913.555, currency: "RUB" },
+        source: "tutu",
+      }).success,
+    ).toBe(false);
+  });
 });

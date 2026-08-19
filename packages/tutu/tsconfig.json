@@ -4,9 +4,10 @@
     "composite": true,
     "declaration": true,
     "declarationMap": true,
+    "types": ["node"],
     "outDir": "dist",
     "rootDir": "src"
   },
   "references": [{ "path": "../contracts" }],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.json"]
 }

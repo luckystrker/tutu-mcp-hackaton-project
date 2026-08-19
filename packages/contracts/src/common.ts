@@ -6,7 +6,13 @@ export const CurrencySchema = z.literal("RUB");
 export const NonEmptyTextSchema = z.string().trim().min(1).max(200);
 
 export const MoneySchema = z.strictObject({
-  amount: z.number().int().nonnegative(),
+  amount: z
+    .number()
+    .finite()
+    .nonnegative()
+    .refine((amount) => Math.round(amount * 100) / 100 === amount, {
+      message: "Money amount must have no more than two decimal places",
+    }),
   currency: CurrencySchema,
 });
 
