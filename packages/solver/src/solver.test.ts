@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { compareDestinations } from "./compare.js";
+import { hotelShareMinor } from "./bundles.js";
 import type { CandidateTravelFacts } from "./model.js";
 import { SolverError } from "./numeric.js";
 import { presetToWeights } from "./presets.js";
@@ -14,6 +15,31 @@ import {
 } from "./test-fixtures.js";
 
 describe("deterministic solver", () => {
+  it("allocates every hotel minor unit exactly and deterministically", () => {
+    const trip = solverTrip();
+    const facts = {
+      ...candidate({ participants: trip.participants }),
+      hotels: [
+        {
+          id: "hotel-allocation",
+          cityId: IDS.cities[0],
+          name: "Hotel",
+          totalPrice: { amount: 1000.01, currency: "RUB" as const },
+          checkIn: "2026-09-04",
+          checkOut: "2026-09-05",
+          fetchedAt: "2026-08-19T00:00:00.000Z",
+          source: "tutu" as const,
+        },
+      ],
+    };
+    const ids = facts.participants.map(({ participantId }) => participantId);
+    const shares = ids.map((id) => hotelShareMinor(facts, ids.length, id));
+    expect(shares.reduce((sum, value) => sum + value, 0)).toBe(100_001);
+    expect(shares).toEqual(
+      [...ids].sort().map((id) => hotelShareMinor(facts, ids.length, id)),
+    );
+  });
+
   it("changes the winner on local preset rescore without new travel facts", () => {
     const trip = solverTrip();
     const cheapShort = candidate({
@@ -457,6 +483,10 @@ describe("deterministic solver", () => {
         ?.bundles[0]?.hotelShareMinor,
     ).toBe(100_000);
     expect(
+      result.allFeasible.find(({ cityId }) => cityId === IDS.cities[0])
+        ?.hotelRequired,
+    ).toBe(true);
+    expect(
       result.allFeasible.find(({ cityId }) => cityId === IDS.cities[1])
         ?.degraded,
     ).toBe(true);
@@ -467,6 +497,35 @@ describe("deterministic solver", () => {
       result.allFeasible.find(({ cityId }) => cityId === IDS.cities[3])
         ?.degraded,
     ).toBe(true);
+  });
+
+  it("keeps a same-local-day destination feasible without hotels and marks it hotelRequired=false", () => {
+    const trip = solverTrip();
+    const sameDay = {
+      ...candidate({ cityId: IDS.cities[0], participants: trip.participants }),
+      hotelRequired: false,
+      hotels: [],
+    };
+    const overnightWithoutHotels = {
+      ...candidate({ cityId: IDS.cities[1], participants: trip.participants }),
+      hotelRequired: true,
+      hotels: [],
+    };
+    const result = solve({
+      trip,
+      candidates: [sameDay, overnightWithoutHotels],
+      scoring: BALANCED,
+      algorithmVersion: "solver-v1",
+    });
+    const solution = result.allFeasible.find(
+      ({ cityId }) => cityId === IDS.cities[0],
+    );
+    expect(solution?.hotelRequired).toBe(false);
+    expect(solution?.degraded).toBe(false);
+    expect(result.ranked.map(({ cityId }) => cityId)).toEqual([IDS.cities[0]]);
+    expect(
+      result.rejected.find(({ cityId }) => cityId === IDS.cities[1])?.reasons,
+    ).toEqual(["NO_HOTEL_AVAILABILITY"]);
   });
 
   it("is invariant to participant and option permutations", () => {

@@ -14,6 +14,12 @@ export const TripCapabilitiesSchema = z.strictObject({
   canCancel: z.boolean(),
 });
 
+export const ShortlistStateSchema = z.strictObject({
+  cityIds: z.array(z.uuid()).max(3),
+  revision: z.number().int().nonnegative().nullable(),
+  stale: z.boolean(),
+});
+
 export const TripPrivateDtoSchema = z.strictObject({
   trip: TripSchema,
   participants: z.array(ParticipantPrivateSchema),
@@ -25,6 +31,7 @@ export const TripGroupDtoSchema = z.strictObject({
   participants: z.array(ParticipantGroupDtoSchema),
   me: ParticipantSelfDtoSchema,
   destinations: z.array(DestinationResultDtoSchema),
+  shortlist: ShortlistStateSchema,
 });
 
 export const TripOrganizerDtoSchema = TripGroupDtoSchema.extend({
@@ -35,3 +42,4 @@ export type TripCapabilities = z.infer<typeof TripCapabilitiesSchema>;
 export type TripPrivateDto = z.infer<typeof TripPrivateDtoSchema>;
 export type TripGroupDto = z.infer<typeof TripGroupDtoSchema>;
 export type TripOrganizerDto = z.infer<typeof TripOrganizerDtoSchema>;
+export type ShortlistState = z.infer<typeof ShortlistStateSchema>;

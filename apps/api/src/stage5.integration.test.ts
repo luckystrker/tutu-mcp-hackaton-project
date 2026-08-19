@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   CreateTripResponseSchema,
+  FinalTripDtoSchema,
   InviteTokenResponseSchema,
   type HotelOption,
   type RouteOption,
@@ -42,6 +43,7 @@ describeDatabase("stage 5 data/API/workflow", () => {
   let repository: TripRepository;
   let app: ReturnType<typeof buildApp>;
   let tripId = "";
+  let secondTripId = "";
   const adapter = new FakeAdapter();
 
   beforeAll(async () => {
@@ -57,10 +59,9 @@ describeDatabase("stage 5 data/API/workflow", () => {
   });
 
   afterAll(async () => {
-    if (tripId)
-      await database.query(`DELETE FROM rendezvous.trips WHERE id=$1`, [
-        tripId,
-      ]);
+    for (const id of [tripId, secondTripId].filter(Boolean)) {
+      await database.query(`DELETE FROM rendezvous.trips WHERE id=$1`, [id]);
+    }
     await database.query(
       `DELETE FROM rendezvous.users WHERE id=ANY($1::uuid[])`,
       [[organizerId, memberId, strangerId]],
@@ -178,6 +179,85 @@ describeDatabase("stage 5 data/API/workflow", () => {
     expect(adapter.calls).toBe(callsBeforeRescore);
   });
 
+  it("marks the shortlist stale after a ranking-only rescore", async () => {
+    const viewResponse = await app.inject({
+      method: "GET",
+      url: `/api/trips/${tripId}`,
+      headers: actorHeaders(organizerId, "Организатор"),
+    });
+    const cityId = TripOrganizerDtoSchema.parse(viewResponse.json())
+      .destinations[0]!.city.id;
+
+    const saved = await app.inject({
+      method: "PUT",
+      url: `/api/trips/${tripId}/shortlist`,
+      headers: actorHeaders(organizerId, "Организатор"),
+      payload: { cityIds: [cityId] },
+    });
+    expect(saved.statusCode, saved.body).toBe(204);
+    const freshView = TripOrganizerDtoSchema.parse(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/trips/${tripId}`,
+          headers: actorHeaders(organizerId, "Организатор"),
+        })
+      ).json(),
+    );
+    expect(freshView.shortlist.stale).toBe(false);
+    expect(freshView.shortlist.revision).toBe(freshView.trip.revision);
+
+    const rescored = await app.inject({
+      method: "PUT",
+      url: `/api/trips/${tripId}/scoring`,
+      headers: actorHeaders(organizerId, "Организатор"),
+      payload: {
+        together: 30,
+        cost: 30,
+        travel: 20,
+        synchronization: 10,
+        fairness: 10,
+      },
+    });
+    expect(rescored.statusCode, rescored.body).toBe(200);
+    expect(
+      TripOrganizerDtoSchema.parse(rescored.json()).trip.rankingVersion,
+    ).toBe(2);
+
+    const staleView = TripOrganizerDtoSchema.parse(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/trips/${tripId}`,
+          headers: actorHeaders(organizerId, "Организатор"),
+        })
+      ).json(),
+    );
+    expect(staleView.shortlist.cityIds).toEqual([cityId]);
+    expect(staleView.shortlist.revision).toBe(staleView.trip.revision);
+    expect(staleView.trip.rankingVersion).toBe(2);
+    expect(staleView.shortlist.stale).toBe(true);
+
+    const reopened = await app.inject({
+      method: "POST",
+      url: `/api/trips/${tripId}/reopen`,
+      headers: actorHeaders(organizerId, "Организатор"),
+    });
+    expect(reopened.statusCode, reopened.body).toBe(204);
+    const liveView = TripOrganizerDtoSchema.parse(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/trips/${tripId}`,
+          headers: actorHeaders(organizerId, "Организатор"),
+        })
+      ).json(),
+    );
+    expect(liveView.trip.status).toBe("LIVE");
+    expect(liveView.shortlist.cityIds).toEqual([cityId]);
+    expect(liveView.shortlist.stale).toBe(true);
+  });
+
   it("discards superseded revisions and a fresh worker resumes the pending job", async () => {
     const origin = CITY_CATALOG[2]!;
     for (let index = 0; index < 2; index += 1) {
@@ -273,6 +353,35 @@ describeDatabase("stage 5 data/API/workflow", () => {
       payload: { destinationResultId: destination.resultId },
     });
     expect(finalized.statusCode, finalized.body).toBe(200);
+    const organizerFinal = FinalTripDtoSchema.parse(finalized.json());
+    expect(organizerFinal.myRoute?.participantId).toBe(
+      TripOrganizerDtoSchema.parse(viewResponse.json()).me.id,
+    );
+    expect(finalized.json()).not.toHaveProperty("routes");
+
+    const memberFinalResponse = await app.inject({
+      method: "GET",
+      url: `/api/trips/${tripId}/final`,
+      headers: actorHeaders(memberId, "Участник"),
+    });
+    expect(memberFinalResponse.statusCode, memberFinalResponse.body).toBe(200);
+    const memberFinal = FinalTripDtoSchema.parse(memberFinalResponse.json());
+    expect(memberFinal.myRoute?.participantId).toBe(reactedView.me.id);
+    expect(memberFinal.myRoute?.participantId).not.toBe(
+      organizerFinal.myRoute!.participantId,
+    );
+    expect(memberFinalResponse.json()).not.toHaveProperty("routes");
+
+    const repeatedFinal = await app.inject({
+      method: "POST",
+      url: `/api/trips/${tripId}/finalize`,
+      headers: actorHeaders(organizerId, "Организатор"),
+      payload: { destinationResultId: destination.resultId },
+    });
+    expect(repeatedFinal.statusCode).toBe(200);
+    expect(FinalTripDtoSchema.parse(repeatedFinal.json())).toEqual(
+      organizerFinal,
+    );
     const finalizedView = await app.inject({
       method: "GET",
       url: `/api/trips/${tripId}`,
@@ -289,6 +398,27 @@ describeDatabase("stage 5 data/API/workflow", () => {
         { cityIds: [destination.city.id] },
       ],
       [`/api/trips/${tripId}/settings`, "PUT", { title: "Поздно" }],
+      [
+        `/api/trips/${tripId}/scoring`,
+        "PUT",
+        {
+          together: 20,
+          cost: 40,
+          travel: 20,
+          synchronization: 10,
+          fairness: 10,
+        },
+      ],
+      [
+        `/api/trips/${tripId}/reactions`,
+        "POST",
+        { cityId: destination.city.id, value: "ok" },
+      ],
+      [
+        `/api/trips/${tripId}/reactions/${destination.city.id}`,
+        "DELETE",
+        undefined,
+      ],
     ] as const) {
       const closedMutation = await app.inject({
         method,
@@ -298,6 +428,105 @@ describeDatabase("stage 5 data/API/workflow", () => {
       });
       expect(closedMutation.statusCode).toBe(409);
     }
+  });
+
+  it("finalizes a same-local-day trip without a hotel even when route UTC dates differ", async () => {
+    const createdResponse = await app.inject({
+      method: "POST",
+      url: "/api/trips",
+      headers: actorHeaders(organizerId, "Организатор"),
+      payload: {
+        title: "Однодневная встреча через UTC-полночь",
+        expectedParticipants: 2,
+        minTogetherMinutes: 600,
+        periodFrom: "2026-09-04T08:00:00.000Z",
+        periodTo: "2026-09-06T22:00:00.000Z",
+        allowInternational: false,
+      },
+    });
+    expect(createdResponse.statusCode, createdResponse.body).toBe(201);
+    secondTripId = CreateTripResponseSchema.parse(createdResponse.json()).trip
+      .id;
+
+    const rotated = await app.inject({
+      method: "POST",
+      url: `/api/trips/${secondTripId}/invite-token`,
+      headers: actorHeaders(organizerId, "Организатор"),
+    });
+    expect(rotated.statusCode).toBe(200);
+    const joined = await app.inject({
+      method: "POST",
+      url: `/api/invites/${
+        InviteTokenResponseSchema.parse(rotated.json()).inviteToken
+      }/join`,
+      headers: actorHeaders(memberId, "Участник"),
+    });
+    expect(joined.statusCode).toBe(200);
+
+    const origins = CITY_CATALOG.slice(0, 2);
+    for (const [index, userId] of [organizerId, memberId].entries()) {
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/trips/${secondTripId}/me/preferences`,
+        headers: actorHeaders(userId, index === 0 ? "Организатор" : "Участник"),
+        payload: {
+          originCityId: origins[index]!.id,
+          availableFrom: "2026-09-04T20:00:00.000Z",
+          mustReturnBy: "2026-09-05T14:00:00.000Z",
+          maxBudget: { amount: 20_000, currency: "RUB" },
+          forbiddenModes: [],
+          softPreferences: { preferDirect: true },
+          ready: true,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+    }
+
+    const workerErrors: unknown[] = [];
+    const tripWorker = worker(repository, adapter, workerErrors);
+    await expect(tripWorker.drain()).resolves.toBe(1);
+    await tripWorker.close();
+    expect(workerErrors).toEqual([]);
+
+    const viewResponse = await app.inject({
+      method: "GET",
+      url: `/api/trips/${secondTripId}`,
+      headers: actorHeaders(organizerId, "Организатор"),
+    });
+    expect(viewResponse.statusCode, viewResponse.body).toBe(200);
+    const view = TripOrganizerDtoSchema.parse(viewResponse.json());
+    expect(view.destinations.length).toBeGreaterThan(0);
+    const destination = view.destinations[0]!;
+    // Same local day in every destination time zone: no hotel is required and
+    // none was searched, while route UTC dates still straddle midnight.
+    expect(destination.hotelRequired).toBe(false);
+    expect(destination.hotels).toEqual([]);
+    expect(destination.routes[0]!.outboundArrivalAt.slice(0, 10)).toBe(
+      "2026-09-04",
+    );
+    expect(destination.routes[0]!.returnDepartureAt.slice(0, 10)).toBe(
+      "2026-09-05",
+    );
+
+    const shortlist = await app.inject({
+      method: "PUT",
+      url: `/api/trips/${secondTripId}/shortlist`,
+      headers: actorHeaders(organizerId, "Организатор"),
+      payload: { cityIds: [destination.city.id] },
+    });
+    expect(shortlist.statusCode, shortlist.body).toBe(204);
+    const finalized = await app.inject({
+      method: "POST",
+      url: `/api/trips/${secondTripId}/finalize`,
+      headers: actorHeaders(organizerId, "Организатор"),
+      payload: { destinationResultId: destination.resultId },
+    });
+    expect(finalized.statusCode, finalized.body).toBe(200);
+    const final = FinalTripDtoSchema.parse(finalized.json());
+    expect(final.hotel).toBeNull();
+    expect(final.hotelAssumption).toBeNull();
+    expect(final.myRoute?.outboundArrivalAt.slice(0, 10)).toBe("2026-09-04");
+    expect(final.myRoute?.returnDepartureAt.slice(0, 10)).toBe("2026-09-05");
   });
 });
 

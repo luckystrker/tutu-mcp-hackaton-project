@@ -19,13 +19,22 @@ export type ParticipantBundleSet = {
 export function hotelShareMinor(
   candidate: CandidateTravelFacts,
   participantCount: number,
+  participantId: string,
 ): number {
   const prices = (candidate.hotels ?? []).flatMap((hotel) =>
     hotel.totalPrice ? [toMinorUnits(hotel.totalPrice.amount)] : [],
   );
-  return prices.length === 0
-    ? 0
-    : Math.ceil(Math.min(...prices) / participantCount);
+  if (prices.length === 0) return 0;
+  const total = Math.min(...prices);
+  const participantIds = [...candidate.participants]
+    .map(({ participantId: id }) => id)
+    .sort()
+    .slice(0, participantCount);
+  const index = participantIds.indexOf(participantId);
+  if (index < 0 || participantIds.length !== participantCount)
+    throw new TypeError("Hotel allocation requires every participant");
+  const quotient = Math.floor(total / participantCount);
+  return quotient + (index < total % participantCount ? 1 : 0);
 }
 
 export function buildParticipantBundles(
@@ -76,7 +85,7 @@ function createBundle(
     return null;
   const transportCostMinor =
     toMinorUnits(outbound.price.amount) + toMinorUnits(returning.price.amount);
-  const share = hotelShareMinor(candidate, participantCount);
+  const share = hotelShareMinor(candidate, participantCount, participant.id);
   const estimatedTripCostMinor = transportCostMinor + share;
   const departureMinutes = requiredMinutesBetween(
     outbound.departureAt,

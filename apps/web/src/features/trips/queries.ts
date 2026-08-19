@@ -10,8 +10,17 @@ import { useApi } from "../../app/providers.js";
 export const tripKeys = {
   all: ["trips"] as const,
   detail: (id: string) => ["trip", id] as const,
+  final: (id: string) => ["trip-final", id] as const,
   invite: (id: string) => ["invite", id] as const,
 };
+
+export function useFinalTrip(id: string) {
+  const api = useApi();
+  return useQuery({
+    queryKey: tripKeys.final(id),
+    queryFn: () => api.getFinal(id),
+  });
+}
 
 export function useTrips() {
   const api = useApi();
@@ -103,6 +112,9 @@ export function useFinalizeMutation(id: string) {
   return useMutation({
     mutationFn: (destinationResultId: string) =>
       api.finalize(id, destinationResultId),
-    onSuccess: (view) => client.setQueryData(tripKeys.detail(id), view),
+    onSuccess: (view) => {
+      client.setQueryData(tripKeys.final(id), view);
+      void client.invalidateQueries({ queryKey: tripKeys.detail(id) });
+    },
   });
 }

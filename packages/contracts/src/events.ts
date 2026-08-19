@@ -54,7 +54,7 @@ export const TripEventSchema = z.discriminatedUnion("type", [
     type: z.literal("reaction_added"),
     payload: z.strictObject({
       cityId: EntityIdSchema,
-      value: z.enum(["love", "ok", "no"]).optional(),
+      value: z.enum(["love", "ok", "dislike"]).optional(),
     }),
   }),
   EventBaseSchema.extend({

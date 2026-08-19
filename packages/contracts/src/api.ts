@@ -91,7 +91,7 @@ export const UpdateTripSettingsInputSchema = z
   );
 
 export const UpdateScoringInputSchema = ScoringConfigSchema;
-export const ReactionValueSchema = z.enum(["love", "ok", "no"]);
+export const ReactionValueSchema = z.enum(["love", "ok", "dislike"]);
 export const SetReactionInputSchema = z.strictObject({
   cityId: EntityIdSchema,
   value: ReactionValueSchema,

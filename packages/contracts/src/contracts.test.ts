@@ -3,6 +3,7 @@ import {
   ApiErrorSchema,
   CitySchema,
   DestinationResultDtoSchema,
+  FinalTripDtoSchema,
   HotelOptionSchema,
   ParticipantPrivateSchema,
   RouteOptionSchema,
@@ -184,6 +185,7 @@ describe("shared contracts", () => {
       participants: [groupParticipant],
       me,
       destinations: [destination],
+      shortlist: { cityIds: [], revision: null, stale: false },
     };
 
     expect(
@@ -212,6 +214,33 @@ describe("shared contracts", () => {
     expect(DestinationResultDtoSchema.safeParse(destination).success).toBe(
       true,
     );
+  });
+
+  it("projects the final trip personally and allows a member without a route", () => {
+    const publicTrip = (({ organizerUserId: _, ...value }) => value)(trip);
+    const base = {
+      trip: publicTrip,
+      city: destination.city,
+      score: destination.score,
+      components: destination.components,
+      commonTimeMinutes: destination.commonTimeMinutes,
+      myRoute: destination.routes[0],
+      hotel: null,
+      hotelAssumption: null,
+      checkedAt: now,
+      degraded: false,
+      finalizedAt: now,
+    };
+    expect(FinalTripDtoSchema.safeParse(base).success).toBe(true);
+    expect(
+      FinalTripDtoSchema.safeParse({ ...base, myRoute: null }).success,
+    ).toBe(true);
+    expect(
+      DestinationResultDtoSchema.safeParse({
+        ...destination,
+        hotelRequired: false,
+      }).success,
+    ).toBe(true);
   });
 
   it("parses API errors and discriminated SSE events", () => {

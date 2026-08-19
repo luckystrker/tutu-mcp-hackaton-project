@@ -3,6 +3,7 @@ import type {
   City,
   CreateTripInput,
   DestinationResultDto,
+  FinalTripDto,
   ParticipantPrivate,
   ScoringConfig,
   SetReactionInput,
@@ -62,6 +63,20 @@ export type TripAggregate = {
   destinations: readonly DestinationResultDto[];
   actorParticipant: ParticipantPrivate;
   isOrganizer: boolean;
+  shortlist: {
+    cityIds: readonly string[];
+    revision: number | null;
+    stale: boolean;
+  };
+};
+
+type FinalSnapshot = {
+  destination: DestinationResultDto;
+  revision: number;
+  rankingVersion: number;
+  algorithmVersion: string;
+  scoringAlgorithmVersion: string;
+  candidateAlgorithmVersion: string;
 };
 
 export type RecomputeJob = {
@@ -225,12 +240,31 @@ export class TripRepository {
     if (!actorParticipant) notFound();
     const destinations = await this.latestDestinations(tripId, actorId);
     const trip = mapTrip(tripResult.rows[0]);
+    const shortlistRows = await this.database.query<{
+      city_id: string;
+      revision: number;
+      ranking_version: number;
+    }>(
+      `SELECT city_id,revision,ranking_version FROM rendezvous.shortlist WHERE trip_id=$1 ORDER BY position`,
+      [tripId],
+    );
+    const shortlistRevision = shortlistRows.rows[0]?.revision ?? null;
+    const shortlistRankingVersion =
+      shortlistRows.rows[0]?.ranking_version ?? null;
     return {
       trip,
       participants,
       destinations,
       actorParticipant,
       isOrganizer: trip.organizerUserId === actorId,
+      shortlist: {
+        cityIds: shortlistRows.rows.map(({ city_id }) => city_id),
+        revision: shortlistRevision,
+        stale:
+          shortlistRevision !== null &&
+          (shortlistRevision !== trip.revision ||
+            shortlistRankingVersion !== trip.rankingVersion),
+      },
     };
   }
 
@@ -341,6 +375,7 @@ export class TripRepository {
     return this.database.transaction(async (client) => {
       const trip = await lockedTrip(client, tripId);
       requireOrganizer(trip, actorId);
+      requireEditable(trip);
       const rankingVersion = trip.ranking_version + 1;
       const activeJob = await client.query(
         `SELECT 1 FROM rendezvous.recompute_jobs WHERE trip_id=$1 AND revision=$2 AND status IN ('QUEUED','RUNNING')`,
@@ -379,6 +414,7 @@ export class TripRepository {
       const trip = await lockedTrip(client, tripId);
       await requireMembership(client, actorId, tripId);
       requireEditable(trip);
+      await requireCurrentDestination(client, trip, input.cityId);
       await client.query(
         `INSERT INTO rendezvous.reactions(trip_id,city_id,user_id,value) VALUES($1,$2,$3,$4)
          ON CONFLICT(trip_id,city_id,user_id) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`,
@@ -396,11 +432,16 @@ export class TripRepository {
     tripId: string,
     cityId: string,
   ): Promise<void> {
-    await this.requireMembership(actorId, tripId);
-    await this.database.query(
-      `DELETE FROM rendezvous.reactions WHERE trip_id=$1 AND city_id=$2 AND user_id=$3`,
-      [tripId, cityId, actorId],
-    );
+    await this.database.transaction(async (client) => {
+      const trip = await lockedTrip(client, tripId);
+      await requireMembership(client, actorId, tripId);
+      requireEditable(trip);
+      await requireCurrentDestination(client, trip, cityId);
+      await client.query(
+        `DELETE FROM rendezvous.reactions WHERE trip_id=$1 AND city_id=$2 AND user_id=$3`,
+        [tripId, cityId, actorId],
+      );
+    });
   }
 
   async setShortlist(
@@ -424,13 +465,26 @@ export class TripRepository {
           422,
           "Shortlist cannot be empty",
         );
+      const current = await client.query<{ city_id: string }>(
+        `SELECT d.city_id FROM rendezvous.destination_results d
+         JOIN rendezvous.trip_results r ON r.id=d.trip_result_id
+         WHERE r.trip_id=$1 AND r.revision=$2 AND r.ranking_version=$3`,
+        [tripId, trip.revision, trip.ranking_version],
+      );
+      const currentCities = new Set(current.rows.map(({ city_id }) => city_id));
+      if (cityIds.some((cityId) => !currentCities.has(cityId)))
+        throw new ApplicationError(
+          "STALE_RESULT",
+          409,
+          "Shortlist contains a stale destination",
+        );
       await client.query(`DELETE FROM rendezvous.shortlist WHERE trip_id=$1`, [
         tripId,
       ]);
       for (const [index, cityId] of cityIds.entries()) {
         await client.query(
-          `INSERT INTO rendezvous.shortlist(trip_id,city_id,position) VALUES($1,$2,$3)`,
-          [tripId, cityId, index + 1],
+          `INSERT INTO rendezvous.shortlist(trip_id,city_id,position,revision,ranking_version) VALUES($1,$2,$3,$4,$5)`,
+          [tripId, cityId, index + 1, trip.revision, trip.ranking_version],
         );
       }
       await client.query(
@@ -514,10 +568,38 @@ export class TripRepository {
     actorId: string,
     tripId: string,
     destinationResultId: string,
-  ): Promise<DestinationResultDto> {
+  ): Promise<FinalTripDto> {
     return this.database.transaction(async (client) => {
       const trip = await lockedTrip(client, tripId);
       requireOrganizer(trip, actorId);
+      const actorParticipant = await participantIdForUser(
+        client,
+        actorId,
+        tripId,
+      );
+      const existing = await client.query<{
+        destination_result_id: string;
+        snapshot: FinalSnapshot;
+        finalized_at: Date;
+      }>(
+        `SELECT destination_result_id,snapshot,finalized_at
+         FROM rendezvous.final_selections WHERE trip_id=$1`,
+        [tripId],
+      );
+      if (existing.rows[0]) {
+        if (existing.rows[0].destination_result_id !== destinationResultId)
+          throw new ApplicationError(
+            "TRIP_FINALIZED",
+            409,
+            "Trip was finalized with another destination",
+          );
+        return projectFinalTrip(
+          trip,
+          existing.rows[0].snapshot,
+          actorParticipant,
+          existing.rows[0].finalized_at,
+        );
+      }
       if (trip.status !== "SHORTLIST")
         throw new ApplicationError(
           "INVALID_STATE",
@@ -526,33 +608,112 @@ export class TripRepository {
         );
       const selected = await client.query<{
         solution_facts: DestinationResultDto;
+        revision: number;
+        ranking_version: number;
+        algorithm_version: string;
+        scoring_algorithm_version: string;
+        candidate_algorithm_version: string;
       }>(
-        `SELECT d.solution_facts FROM rendezvous.destination_results d
+        `SELECT d.solution_facts,r.revision,r.ranking_version,r.algorithm_version,
+                r.scoring_algorithm_version,r.candidate_algorithm_version
+         FROM rendezvous.destination_results d
          JOIN rendezvous.trip_results r ON r.id=d.trip_result_id
-         WHERE d.id=$1 AND r.trip_id=$2 ORDER BY r.revision DESC,r.ranking_version DESC LIMIT 1`,
-        [destinationResultId, tripId],
+         JOIN rendezvous.shortlist s ON s.trip_id=r.trip_id AND s.city_id=d.city_id
+         WHERE d.id=$1 AND r.trip_id=$2 AND r.revision=$3
+           AND r.ranking_version=$4 AND s.revision=$3`,
+        [destinationResultId, tripId, trip.revision, trip.ranking_version],
       );
-      const destination = selected.rows[0]?.solution_facts;
+      const row = selected.rows[0];
+      const destination = row?.solution_facts;
       if (!destination)
         throw new ApplicationError(
-          "RESULT_NOT_FOUND",
-          404,
-          "Destination result not found",
+          "STALE_RESULT",
+          409,
+          "Destination is not in the current shortlist",
         );
-      await client.query(
-        `INSERT INTO rendezvous.final_selections(trip_id,destination_result_id,snapshot,finalized_by)
-         VALUES($1,$2,$3,$4) ON CONFLICT(trip_id) DO NOTHING`,
-        [tripId, destinationResultId, JSON.stringify(destination), actorId],
+      if (!destination.valid)
+        throw new ApplicationError("INVALID_RESULT", 409, "Result is invalid");
+      const ready = await client.query<{ id: string }>(
+        `SELECT id FROM rendezvous.participants WHERE trip_id=$1 AND ready ORDER BY id`,
+        [tripId],
       );
-      await client.query(
-        `UPDATE rendezvous.trips SET status='FINALIZED',updated_at=now() WHERE id=$1`,
+      const routeIds = [...destination.routes]
+        .map(({ participantId }) => participantId)
+        .sort();
+      if (
+        routeIds.length !== ready.rows.length ||
+        routeIds.some((id, index) => id !== ready.rows[index]?.id)
+      )
+        throw new ApplicationError(
+          "INCOMPLETE_RESULT",
+          409,
+          "Final result does not cover every ready participant",
+        );
+      if (requiresHotel(destination) && destination.hotels.length === 0)
+        throw new ApplicationError(
+          "HOTEL_UNAVAILABLE",
+          409,
+          "An overnight final requires an available hotel",
+        );
+      const snapshot: FinalSnapshot = {
+        destination,
+        revision: row.revision,
+        rankingVersion: row.ranking_version,
+        algorithmVersion: row.algorithm_version,
+        scoringAlgorithmVersion: row.scoring_algorithm_version,
+        candidateAlgorithmVersion: row.candidate_algorithm_version,
+      };
+      const inserted = await client.query<{ finalized_at: Date }>(
+        `INSERT INTO rendezvous.final_selections(
+           trip_id,destination_result_id,snapshot,finalized_by,revision,ranking_version)
+         VALUES($1,$2,$3,$4,$5,$6) RETURNING finalized_at`,
+        [
+          tripId,
+          destinationResultId,
+          JSON.stringify(snapshot),
+          actorId,
+          trip.revision,
+          trip.ranking_version,
+        ],
+      );
+      const finalizedTrip = await client.query<TripRow>(
+        `UPDATE rendezvous.trips SET status='FINALIZED',updated_at=now() WHERE id=$1 RETURNING *`,
         [tripId],
       );
       await insertEvent(client, tripId, trip.revision, "trip_finalized", {
         cityId: destination.city.id,
       });
-      return destination;
+      return projectFinalTrip(
+        finalizedTrip.rows[0]!,
+        snapshot,
+        actorParticipant,
+        inserted.rows[0]!.finalized_at,
+      );
     });
+  }
+
+  async getFinal(actorId: string, tripId: string): Promise<FinalTripDto> {
+    const result = await this.database.query<{
+      trip: TripRow;
+      participant_id: string;
+      snapshot: FinalSnapshot;
+      finalized_at: Date;
+    }>(
+      `SELECT to_jsonb(t.*) AS trip,p.id AS participant_id,f.snapshot,f.finalized_at
+       FROM rendezvous.final_selections f
+       JOIN rendezvous.trips t ON t.id=f.trip_id
+       JOIN rendezvous.participants p ON p.trip_id=t.id AND p.user_id=$1
+       WHERE f.trip_id=$2`,
+      [actorId, tripId],
+    );
+    const row = result.rows[0];
+    if (!row) notFound();
+    return projectFinalTrip(
+      mapJsonTripRow(row.trip),
+      row.snapshot,
+      row.participant_id,
+      row.finalized_at,
+    );
   }
 
   async requeueOrphanedJobs(): Promise<number> {
@@ -887,13 +1048,13 @@ export class TripRepository {
       city_id: string;
       love: string;
       ok: string;
-      no: string;
-      mine: "love" | "ok" | "no" | null;
+      dislike: string;
+      mine: "love" | "ok" | "dislike" | null;
     }>(
       `SELECT city_id,
          count(*) FILTER (WHERE value='love')::text AS love,
          count(*) FILTER (WHERE value='ok')::text AS ok,
-         count(*) FILTER (WHERE value='no')::text AS no,
+         count(*) FILTER (WHERE value='dislike')::text AS dislike,
          max(value) FILTER (WHERE user_id=$2) AS mine
        FROM rendezvous.reactions WHERE trip_id=$1 GROUP BY city_id`,
       [tripId, actorId],
@@ -907,7 +1068,7 @@ export class TripRepository {
         reactions: {
           love: Number(counts?.love ?? 0),
           ok: Number(counts?.ok ?? 0),
-          no: Number(counts?.no ?? 0),
+          dislike: Number(counts?.dislike ?? 0),
           mine: counts?.mine ?? null,
         },
       };
@@ -969,6 +1130,38 @@ async function requireMembership(
   if (!result.rowCount) notFound();
 }
 
+async function participantIdForUser(
+  client: Queryable,
+  actorId: string,
+  tripId: string,
+): Promise<string> {
+  const result = await client.query<{ id: string }>(
+    `SELECT id FROM rendezvous.participants WHERE trip_id=$1 AND user_id=$2`,
+    [tripId, actorId],
+  );
+  if (!result.rows[0]) notFound();
+  return result.rows[0].id;
+}
+
+async function requireCurrentDestination(
+  client: Queryable,
+  trip: TripRow,
+  cityId: string,
+): Promise<void> {
+  const result = await client.query(
+    `SELECT 1 FROM rendezvous.destination_results d
+     JOIN rendezvous.trip_results r ON r.id=d.trip_result_id
+     WHERE r.trip_id=$1 AND r.revision=$2 AND r.ranking_version=$3 AND d.city_id=$4`,
+    [trip.id, trip.revision, trip.ranking_version, cityId],
+  );
+  if (!result.rowCount)
+    throw new ApplicationError(
+      "STALE_RESULT",
+      409,
+      "Destination is not in the current ranking",
+    );
+}
+
 async function enqueueJob(
   client: Queryable,
   tripId: string,
@@ -1024,6 +1217,102 @@ function mapTrip(row: TripRow): Trip {
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   });
+}
+
+function mapJsonTripRow(row: TripRow): TripRow {
+  return {
+    ...row,
+    period_from: new Date(row.period_from),
+    period_to: new Date(row.period_to),
+    created_at: new Date(row.created_at),
+    updated_at: new Date(row.updated_at),
+  };
+}
+
+function projectFinalTrip(
+  tripRow: TripRow,
+  snapshot: FinalSnapshot,
+  participantId: string,
+  finalizedAt: Date,
+): FinalTripDto {
+  const destination = snapshot.destination;
+  const route = destination.routes.find(
+    (candidate) => candidate.participantId === participantId,
+  );
+  const trip = mapTrip(tripRow);
+  const { organizerUserId: _, ...publicTrip } = trip;
+  const safeRoute =
+    route === undefined
+      ? null
+      : {
+          ...route,
+          ...(safeTutuUrl(route.outboundBookingUrl)
+            ? { outboundBookingUrl: route.outboundBookingUrl }
+            : { outboundBookingUrl: undefined }),
+          ...(safeTutuUrl(route.returnBookingUrl)
+            ? { returnBookingUrl: route.returnBookingUrl }
+            : { returnBookingUrl: undefined }),
+        };
+  const hotel = chooseHotel(destination.hotels);
+  return {
+    trip: publicTrip,
+    city: destination.city,
+    score: destination.score,
+    components: destination.components,
+    commonTimeMinutes: destination.commonTimeMinutes,
+    myRoute: safeRoute,
+    hotel: hotel
+      ? {
+          ...hotel,
+          ...(safeTutuUrl(hotel.bookingUrl)
+            ? { bookingUrl: hotel.bookingUrl }
+            : { bookingUrl: undefined }),
+        }
+      : null,
+    hotelAssumption: hotel
+      ? {
+          guests: destination.routes.length,
+          rooms: Math.ceil(destination.routes.length / 2),
+          allocation: "equal-minor-units",
+        }
+      : null,
+    checkedAt: destination.checkedAt,
+    degraded: destination.degraded,
+    finalizedAt: finalizedAt.toISOString(),
+  };
+}
+
+function chooseHotel(
+  hotels: DestinationResultDto["hotels"],
+): DestinationResultDto["hotels"][number] | undefined {
+  return [...hotels].sort((left, right) => {
+    if (left.totalPrice === null) return 1;
+    if (right.totalPrice === null) return -1;
+    return left.totalPrice.amount - right.totalPrice.amount;
+  })[0];
+}
+
+function requiresHotel(destination: DestinationResultDto): boolean {
+  if (typeof destination.hotelRequired === "boolean")
+    return destination.hotelRequired;
+  return destination.routes.some(
+    (route) =>
+      route.outboundArrivalAt.slice(0, 10) !==
+      route.returnDepartureAt.slice(0, 10),
+  );
+}
+
+function safeTutuUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "tutu.ru" || url.hostname.endsWith(".tutu.ru"))
+    );
+  } catch {
+    return false;
+  }
 }
 
 function mapParticipant(row: ParticipantRow): ParticipantPrivate {

@@ -39,7 +39,10 @@ export function solve(input: SolverInput): SolverOutput {
   const rejected: RejectedDestination[] = [];
 
   for (const candidate of prepared) {
-    if (candidate.candidate.hotels?.length === 0) {
+    if (
+      candidate.candidate.hotelRequired !== false &&
+      candidate.candidate.hotels?.length === 0
+    ) {
       rejected.push({
         cityId: candidate.candidate.cityId,
         reasons: ["NO_HOTEL_AVAILABILITY"],
@@ -91,9 +94,13 @@ export function solve(input: SolverInput): SolverOutput {
       rank: 0,
       fetchedAt: candidate.candidate.fetchedAt,
       hotels: candidate.candidate.hotels ?? [],
+      hotelRequired: candidate.candidate.hotelRequired !== false,
       degraded:
-        candidate.candidate.hotels === undefined ||
-        candidate.candidate.hotels.every((hotel) => hotel.totalPrice === null),
+        candidate.candidate.hotelRequired !== false &&
+        (candidate.candidate.hotels === undefined ||
+          candidate.candidate.hotels.every(
+            (hotel) => hotel.totalPrice === null,
+          )),
       groupFrontier,
     });
   }

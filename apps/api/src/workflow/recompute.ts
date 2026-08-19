@@ -184,7 +184,15 @@ export class RecomputeRunner {
       const city = this.#cityById.get(solution.cityId)!;
       const checkIn = localDate(solution.commonStart, city.tz);
       const checkOut = localDate(solution.commonEnd, city.tz);
-      if (checkIn === checkOut) continue;
+      if (checkIn === checkOut) {
+        const current = factsByCity.get(solution.cityId)!;
+        factsByCity.set(solution.cityId, {
+          ...current,
+          hotelRequired: false,
+          hotels: [],
+        });
+        continue;
+      }
       const result = await safeAdapterCall("searchHotels", signal, () =>
         this.adapter.searchHotels(
           {
@@ -192,27 +200,36 @@ export class RecomputeRunner {
             checkIn,
             checkOut,
             guests: validated.value.participants.length,
-            rooms: 1,
+            rooms: Math.ceil(validated.value.participants.length / 2),
+            currency: "RUB",
           },
           signal,
         ),
       );
       degraded ||= result.status === "partial";
       const current = factsByCity.get(solution.cityId)!;
+      if (result.availability === "none") {
+        factsByCity.set(solution.cityId, {
+          ...current,
+          hotelRequired: true,
+          hotels: [],
+        });
+        continue;
+      }
       factsByCity.set(solution.cityId, {
         ...current,
+        hotelRequired: true,
         ...(result.status === "partial" && result.data.length === 0
           ? {}
           : { hotels: result.data }),
       });
     }
-    for (const [cityId, facts] of factsByCity) {
-      if (!enrichedCities.has(cityId))
-        factsByCity.set(cityId, { ...facts, hotels: [] });
-    }
+    const enrichedFacts = [...factsByCity.values()].filter(({ cityId }) =>
+      enrichedCities.has(cityId),
+    );
     const output = solve({
       trip: validated.value,
-      candidates: [...factsByCity.values()],
+      candidates: enrichedFacts,
       scoring: snapshot.trip.scoringConfig,
       algorithmVersion: "solver-v1",
     });
@@ -235,7 +252,7 @@ export class RecomputeRunner {
       {
         ...logFields,
         status,
-        candidates: factsByCity.size,
+        candidates: enrichedFacts.length,
         ranked: destinations.length,
         durationMs: Math.round(performance.now() - startedAt),
         degraded,

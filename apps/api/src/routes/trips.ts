@@ -3,6 +3,7 @@ import {
   CreateTripResponseSchema,
   EntityIdSchema,
   FinalizeTripInputSchema,
+  FinalTripDtoSchema,
   InviteTokenResponseSchema,
   ParticipantSelfDtoSchema,
   SetReactionInputSchema,
@@ -64,6 +65,16 @@ export const tripRoutes: FastifyPluginAsync<{
     const { tripId } = ParamsSchema.parse(request.params);
     return TripViewSchema.parse(
       await options.service.getTrip(
+        await options.authenticator.authenticate(request.headers),
+        tripId,
+      ),
+    );
+  });
+
+  app.get("/api/trips/:tripId/final", async (request) => {
+    const { tripId } = ParamsSchema.parse(request.params);
+    return FinalTripDtoSchema.parse(
+      await options.service.getFinal(
         await options.authenticator.authenticate(request.headers),
         tripId,
       ),
@@ -251,10 +262,12 @@ export const tripRoutes: FastifyPluginAsync<{
   app.post("/api/trips/:tripId/finalize", async (request) => {
     const { tripId } = ParamsSchema.parse(request.params);
     const { destinationResultId } = FinalizeTripInputSchema.parse(request.body);
-    return options.service.finalize(
-      await options.authenticator.authenticate(request.headers),
-      tripId,
-      destinationResultId,
+    return FinalTripDtoSchema.parse(
+      await options.service.finalize(
+        await options.authenticator.authenticate(request.headers),
+        tripId,
+        destinationResultId,
+      ),
     );
   });
 };

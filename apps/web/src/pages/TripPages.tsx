@@ -12,7 +12,7 @@ import {
   presetToWeights,
   type ScoringPreset,
 } from "@rendezvous/solver/presets";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useApi } from "../app/providers.js";
 import { AppFrame } from "../components/AppFrame.js";
@@ -27,6 +27,7 @@ import {
   useScoringMutation,
   useShortlistMutation,
   useFinalizeMutation,
+  useFinalTrip,
   useTrip,
   useTrips,
 } from "../features/trips/queries.js";
@@ -858,6 +859,9 @@ export function ShortlistPage() {
   const reaction = useReactionMutation(id);
   const shortlist = useShortlistMutation(id);
   const finalize = useFinalizeMutation(id);
+  useEffect(() => {
+    if (view) setSelected([...view.shortlist.cityIds]);
+  }, [view?.shortlist.revision, view?.trip.status]);
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   return (
@@ -869,6 +873,12 @@ export function ShortlistPage() {
           Выберите до трёх городов. Реакции — это мнение, а не скрытый вес в
           рейтинге.
         </p>
+        {view.shortlist.stale && (
+          <p className="muted-note">
+            Условия поездки изменились. Сохраните shortlist заново по свежему
+            рейтингу.
+          </p>
+        )}
         {view.destinations.map((d) => (
           <button
             key={d.city.id}
@@ -898,7 +908,7 @@ export function ShortlistPage() {
             const counts = item.reactions ?? {
               love: 0,
               ok: 0,
-              no: 0,
+              dislike: 0,
               mine: null,
             };
             return (
@@ -910,7 +920,7 @@ export function ShortlistPage() {
                   [
                     ["love", "♥"],
                     ["ok", "≈"],
-                    ["no", "×"],
+                    ["dislike", "👎"],
                   ] as const
                 ).map(([value, icon]) => (
                   <button
@@ -962,56 +972,118 @@ export function ShortlistPage() {
 
 export function FinalTripPage() {
   const id = useTripId();
-  const { data: view, isLoading, error } = useTrip(id);
+  const { data: final, isLoading, error } = useFinalTrip(id);
   if (isLoading) return <Loading />;
-  if (error || !view) return <LoadFailed />;
-  const destination = view.destinations[0];
-  if (!destination) return <EmptyState />;
+  if (error || !final) return <LoadFailed />;
+  const route = final.myRoute;
   return (
     <AppFrame title="Итог поездки" tripId={id}>
       <main className="final-page">
         <p className="eyebrow">Решено</p>
         <div className="final-check">✓</div>
-        <h1>{destination.city.name}</h1>
+        <h1>{final.city.name}</h1>
         <p className="lead">
-          {view.participants.length} человека ·{" "}
-          {formatDuration(destination.commonTimeMinutes)} вместе
+          {formatDuration(final.commonTimeMinutes)} вместе · проверено{" "}
+          {formatDateTime(final.checkedAt)}
         </p>
-        <div className="final-ticket">
-          <div>
-            <small>Туда</small>
-            <strong>{formatDay(view.trip.periodFrom)}</strong>
-            <span>после {formatTime(view.trip.periodFrom)}</span>
+        {route && (
+          <div className="final-ticket">
+            <div>
+              <small>Туда</small>
+              <strong>{formatDay(route.outboundDepartureAt)}</strong>
+              <span>{formatTime(route.outboundDepartureAt)}</span>
+            </div>
+            <i>→</i>
+            <div>
+              <small>Обратно</small>
+              <strong>{formatDay(route.returnDepartureAt)}</strong>
+              <span>{formatTime(route.returnDepartureAt)}</span>
+            </div>
           </div>
-          <i>→</i>
-          <div>
-            <small>Обратно</small>
-            <strong>{formatDay(view.trip.periodTo)}</strong>
-            <span>до {formatTime(view.trip.periodTo)}</span>
-          </div>
-        </div>
-        {(() => {
-          const route = destination.routes.find(
-            ({ participantId }) => participantId === view.me.id,
-          );
-          return route ? (
-            <section className="personal-route">
-              <p className="eyebrow">Твой маршрут</p>
-              <strong>{TRANSPORT_MODE_LABELS[route.mode]}</strong>
-              <span>
-                {formatDateTime(route.outboundDepartureAt)} →{" "}
-                {formatDateTime(route.outboundArrivalAt)}
-              </span>
-              <b>{formatMoney(route.estimatedCost)}</b>
-            </section>
-          ) : null;
-        })()}
-        <HotelOptions hotels={destination.hotels} />
+        )}
+        {route ? (
+          <section className="personal-route">
+            <p className="eyebrow">Твой маршрут</p>
+            <strong>{TRANSPORT_MODE_LABELS[route.mode]}</strong>
+            <span>
+              {formatDateTime(route.outboundDepartureAt)} →{" "}
+              {formatDateTime(route.outboundArrivalAt)}
+            </span>
+            <span>
+              {formatDateTime(route.returnDepartureAt)} →{" "}
+              {formatDateTime(route.returnArrivalAt)}
+            </span>
+            <b>{formatMoney(route.estimatedCost)}</b>
+            {route.outboundBookingUrl && (
+              <a
+                className="secondary-button as-link"
+                href={route.outboundBookingUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Билет туда на Туту
+              </a>
+            )}
+            {route.returnBookingUrl && (
+              <a
+                className="secondary-button as-link"
+                href={route.returnBookingUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Билет обратно на Туту
+              </a>
+            )}
+          </section>
+        ) : (
+          <section className="personal-route">
+            <p className="eyebrow">Твой маршрут</p>
+            <p className="muted-note">
+              Вы не указали предпочтения до финала — личного маршрута нет. Город
+              и отель актуальны для группы.
+            </p>
+          </section>
+        )}
+        {final.hotel ? (
+          <section className="hotel-options">
+            <p className="eyebrow">Где остановиться</p>
+            <article>
+              <div>
+                <strong>{final.hotel.name}</strong>
+                <small>
+                  {final.hotel.checkIn} — {final.hotel.checkOut}
+                </small>
+              </div>
+              <span>★ {final.hotel.rating ?? "—"}</span>
+              <b>{formatMoney(final.hotel.totalPrice)}</b>
+            </article>
+            {final.hotelAssumption && (
+              <p className="muted-note">
+                Расчёт на {final.hotelAssumption.guests} гостей ·{" "}
+                {final.hotelAssumption.rooms} комн. · стоимость делится поровну
+              </p>
+            )}
+            {final.hotel.bookingUrl && (
+              <a
+                className="secondary-button as-link"
+                href={final.hotel.bookingUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Открыть отель на Туту
+              </a>
+            )}
+          </section>
+        ) : null}
+        <p className="muted-note">
+          Цена и наличие не меняют зафиксированный выбор автоматически.
+          Подтвердите их на Туту перед оплатой.
+        </p>
         <h2>Почему это честно</h2>
-        <ScoreBreakdown scores={destination.components} compact />
+        <ScoreBreakdown scores={final.components} compact />
         <Link
           className="primary-button as-link"
-          to={`/trips/${id}/cities/${destination.city.id}`}
+          to={`/trips/${id}/cities/${final.city.id}`}
         >
           Все детали поездки
         </Link>

@@ -62,6 +62,7 @@ live("Tutu MCP live adapter", () => {
             checkOut: checkout.toISOString().slice(0, 10),
             guests: 1,
             rooms: 1,
+            currency: "RUB",
           },
           signal,
         ),

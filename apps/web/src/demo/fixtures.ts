@@ -1,8 +1,10 @@
 import {
   CreateTripResponseSchema,
+  FinalTripDtoSchema,
   TripOrganizerDtoSchema,
   type CreateTripInput,
   type DestinationResultDto,
+  type FinalTripDto,
   type ScoringConfig,
   type SetReactionInput,
   type TripOrganizerDto,
@@ -82,7 +84,7 @@ function destination(
     valid: true,
     checkedAt: now,
     degraded: false,
-    reactions: { love: index + 1, ok: 1, no: 0, mine: null },
+    reactions: { love: index + 1, ok: 1, dislike: 0, mine: null },
   };
 }
 
@@ -144,6 +146,12 @@ function makeView(
       ...item,
       degraded: options.degraded ?? item.degraded,
     })),
+    shortlist: {
+      cityIds:
+        options.status === "SHORTLIST" ? result.map((d) => d.city.id) : [],
+      revision: options.status === "SHORTLIST" ? 4 : null,
+      stale: false,
+    },
     capabilities: {
       canEditSettings: options.status !== "FINALIZED",
       canShortlist: (options.status ?? "LIVE") === "LIVE",
@@ -194,6 +202,33 @@ export class FixtureRendezvousApi implements RendezvousApi {
     return TripOrganizerDtoSchema.parse(
       this.#views.get(id) ?? FIXTURE_TRIPS[DEMO_TRIP_IDS.live],
     );
+  }
+
+  async getFinal(id: string): Promise<FinalTripDto> {
+    const view = (await this.getTrip(id)) as TripOrganizerDto;
+    const destination = view.destinations[0]!;
+    return FinalTripDtoSchema.parse({
+      trip: view.trip,
+      city: destination.city,
+      score: destination.score,
+      components: destination.components,
+      commonTimeMinutes: destination.commonTimeMinutes,
+      myRoute:
+        destination.routes.find(
+          ({ participantId }) => participantId === view.me.id,
+        ) ?? null,
+      hotel: destination.hotels[0] ?? null,
+      hotelAssumption: destination.hotels[0]
+        ? {
+            guests: destination.routes.length,
+            rooms: Math.ceil(destination.routes.length / 2),
+            allocation: "equal-minor-units",
+          }
+        : null,
+      checkedAt: destination.checkedAt,
+      degraded: destination.degraded,
+      finalizedAt: now,
+    });
   }
 
   async getInvite(id: string) {
@@ -250,7 +285,7 @@ export class FixtureRendezvousApi implements RendezvousApi {
       const current = destination.reactions ?? {
         love: 0,
         ok: 0,
-        no: 0,
+        dislike: 0,
         mine: null,
       };
       if (current.mine)
@@ -269,6 +304,11 @@ export class FixtureRendezvousApi implements RendezvousApi {
   ): Promise<TripView> {
     const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
     view.trip.status = "SHORTLIST";
+    view.shortlist = {
+      cityIds: [...cityIds],
+      revision: view.trip.revision,
+      stale: false,
+    };
     view.destinations = view.destinations.filter(({ city }) =>
       cityIds.includes(city.id),
     );
@@ -278,7 +318,10 @@ export class FixtureRendezvousApi implements RendezvousApi {
     return TripOrganizerDtoSchema.parse(view);
   }
 
-  async finalize(id: string, destinationResultId: string): Promise<TripView> {
+  async finalize(
+    id: string,
+    destinationResultId: string,
+  ): Promise<FinalTripDto> {
     const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
     const selected = view.destinations.find(
       ({ resultId }) => resultId === destinationResultId,
@@ -289,7 +332,7 @@ export class FixtureRendezvousApi implements RendezvousApi {
     view.capabilities.canEditSettings = false;
     view.capabilities.canCancel = false;
     this.#views.set(id, view);
-    return TripOrganizerDtoSchema.parse(view);
+    return this.getFinal(id);
   }
 }
 

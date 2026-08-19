@@ -21,6 +21,7 @@ export type HotelSearchInput = {
   checkOut: string;
   guests: number;
   rooms: number;
+  currency: "RUB";
 };
 
 export type ProviderFailureCode =

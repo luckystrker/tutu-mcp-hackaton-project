@@ -1,6 +1,7 @@
 import {
   AuthSessionSchema,
   CreateTripResponseSchema,
+  FinalTripDtoSchema,
   InviteTokenResponseSchema,
   TripGroupDtoSchema,
   TripListSchema,
@@ -11,6 +12,7 @@ import type {
   AuthSession,
   CreateTripInput,
   CreateTripResponse,
+  FinalTripDto,
   ScoringConfig,
   SetReactionInput,
   TripGroupDto,
@@ -25,6 +27,7 @@ export type TripView = TripGroupDto | TripOrganizerDto;
 export interface RendezvousApi {
   listTrips(): Promise<readonly TripPublic[]>;
   getTrip(id: string): Promise<TripView>;
+  getFinal(id: string): Promise<FinalTripDto>;
   getInvite(id: string): Promise<{ inviteToken: string; startAppUrl: string }>;
   createTrip(input: CreateTripInput): Promise<CreateTripResponse>;
   joinTrip(inviteToken: string): Promise<TripView>;
@@ -35,7 +38,7 @@ export interface RendezvousApi {
   updateScoring(id: string, input: ScoringConfig): Promise<TripView>;
   setReaction(id: string, input: SetReactionInput): Promise<TripView>;
   setShortlist(id: string, cityIds: readonly string[]): Promise<TripView>;
-  finalize(id: string, destinationResultId: string): Promise<TripView>;
+  finalize(id: string, destinationResultId: string): Promise<FinalTripDto>;
   subscribeToTrip?(id: string, onEvent: () => void): () => void;
 }
 
@@ -54,6 +57,11 @@ export class HttpRendezvousApi implements RendezvousApi {
   }
   async getTrip(id: string) {
     return TripViewSchema.parse(await this.request(`/api/trips/${id}`));
+  }
+  async getFinal(id: string) {
+    return FinalTripDtoSchema.parse(
+      await this.request(`/api/trips/${id}/final`),
+    );
   }
   async getInvite(id: string) {
     return InviteTokenResponseSchema.parse(
@@ -106,11 +114,12 @@ export class HttpRendezvousApi implements RendezvousApi {
     return this.getTrip(id);
   }
   async finalize(id: string, destinationResultId: string) {
-    await this.request(`/api/trips/${id}/finalize`, {
-      method: "POST",
-      body: JSON.stringify({ destinationResultId }),
-    });
-    return this.getTrip(id);
+    return FinalTripDtoSchema.parse(
+      await this.request(`/api/trips/${id}/finalize`, {
+        method: "POST",
+        body: JSON.stringify({ destinationResultId }),
+      }),
+    );
   }
 
   subscribeToTrip(id: string, onEvent: () => void): () => void {

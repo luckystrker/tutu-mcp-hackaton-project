@@ -157,6 +157,10 @@ export class TripService {
     return this.repository.finalize(actor.userId, tripId, destinationResultId);
   }
 
+  async getFinal(actor: Actor, tripId: string) {
+    return this.repository.getFinal(actor.userId, tripId);
+  }
+
   async listEventsAfter(actor: Actor, tripId: string, afterId: number) {
     return this.repository.listEventsAfter(actor.userId, tripId, afterId);
   }

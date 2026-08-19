@@ -33,6 +33,7 @@ export type CandidateTravelFacts = {
   destinationTimeZone: string;
   participants: readonly ParticipantTravelFacts[];
   hotels?: readonly HotelOption[];
+  hotelRequired?: boolean;
   fetchedAt: string;
 };
 
@@ -99,6 +100,7 @@ export type DestinationSolution = GroupSolution & {
   rank: number;
   fetchedAt: string;
   hotels: readonly HotelOption[];
+  hotelRequired: boolean;
   degraded: boolean;
   groupFrontier: readonly GroupSolution[];
 };

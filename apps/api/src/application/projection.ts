@@ -29,6 +29,10 @@ export function projectAggregate(
     participants,
     me,
     destinations: [...aggregate.destinations],
+    shortlist: {
+      ...aggregate.shortlist,
+      cityIds: [...aggregate.shortlist.cityIds],
+    },
   };
   return aggregate.isOrganizer
     ? {
@@ -86,8 +90,15 @@ function projectDestination(
         amount: fromMinorUnits(bundle.estimatedTripCostMinor),
         currency: "RUB",
       },
+      ...(bundle.outbound.bookingUrl
+        ? { outboundBookingUrl: bundle.outbound.bookingUrl }
+        : {}),
+      ...(bundle.returning.bookingUrl
+        ? { returnBookingUrl: bundle.returning.bookingUrl }
+        : {}),
     })),
     hotels: [...solution.hotels],
+    hotelRequired: solution.hotelRequired,
     valid: true,
     checkedAt: solution.fetchedAt,
     degraded: solution.degraded,
