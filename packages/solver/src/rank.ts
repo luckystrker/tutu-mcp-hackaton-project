@@ -158,12 +158,6 @@ function validateInput(input: SolverInput): void {
       "Solver requires 2 to 4 participants",
     );
   }
-  if (input.trip.trip.expectedParticipants !== input.trip.participants.length) {
-    throw new SolverError(
-      "INVALID_INPUT",
-      "Participant count must match trip expectation",
-    );
-  }
   if (
     new Set(input.trip.participants.map(({ id }) => id)).size !==
     input.trip.participants.length

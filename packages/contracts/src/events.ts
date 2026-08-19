@@ -22,6 +22,13 @@ export const TripEventSchema = z.discriminatedUnion("type", [
     }),
   }),
   EventBaseSchema.extend({
+    type: z.literal("participant_left"),
+    payload: z.strictObject({
+      participantId: EntityIdSchema,
+      readyCount: z.number().int().nonnegative(),
+    }),
+  }),
+  EventBaseSchema.extend({
     type: z.literal("computation_started"),
     payload: z.strictObject({}),
   }),

@@ -1,9 +1,14 @@
 import { ApiErrorSchema } from "@rendezvous/contracts";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
+import { ZodError } from "zod";
+import { ApplicationError } from "./application/errors.js";
+import type { TripService } from "./application/trip-service.js";
 import { healthRoutes } from "./routes/health.js";
+import { tripRoutes } from "./routes/trips.js";
 
 export type AppDependencies = {
   readinessCheck: () => Promise<void>;
+  tripService?: TripService;
   logger?: FastifyServerOptions["logger"];
 };
 
@@ -35,7 +40,12 @@ export function buildApp(dependencies: AppDependencies) {
   });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
-    const statusCode = toClientStatusCode(error.statusCode) ?? 500;
+    const statusCode =
+      error instanceof ApplicationError
+        ? error.statusCode
+        : error instanceof ZodError
+          ? 422
+          : (toClientStatusCode(error.statusCode) ?? 500);
     const isClientError = statusCode < 500;
     request.log[isClientError ? "warn" : "error"](
       { err: error, requestId: request.id },
@@ -44,7 +54,9 @@ export function buildApp(dependencies: AppDependencies) {
     const body = ApiErrorSchema.parse({
       error: {
         code: isClientError
-          ? (CODE_BY_STATUS[statusCode] ?? "REQUEST_FAILED")
+          ? error instanceof ApplicationError
+            ? error.code
+            : (CODE_BY_STATUS[statusCode] ?? "REQUEST_FAILED")
           : "INTERNAL_ERROR",
         message: isClientError ? error.message : "Internal server error",
         requestId: request.id,
@@ -67,5 +79,7 @@ export function buildApp(dependencies: AppDependencies) {
   void app.register(healthRoutes, {
     readinessCheck: dependencies.readinessCheck,
   });
+  if (dependencies.tripService)
+    void app.register(tripRoutes, { service: dependencies.tripService });
   return app;
 }

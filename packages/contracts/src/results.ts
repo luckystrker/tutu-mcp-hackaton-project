@@ -23,6 +23,7 @@ export const ParticipantRouteSummarySchema = z.strictObject({
 });
 
 export const DestinationResultDtoSchema = z.strictObject({
+  resultId: EntityIdSchema.optional(),
   city: PublicCitySchema,
   rank: z.number().int().positive(),
   score: z.number().min(0).max(100),

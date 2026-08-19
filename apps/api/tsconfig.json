@@ -8,6 +8,11 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "references": [{ "path": "../../packages/contracts" }],
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/domain" },
+    { "path": "../../packages/solver" },
+    { "path": "../../packages/tutu" }
+  ],
   "include": ["src/**/*.ts"]
 }
