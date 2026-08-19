@@ -24,6 +24,7 @@ export const AppConfigSchema = z
     PUBLIC_MINI_APP_URL: z.url(),
     LLM_PROVIDER: OptionalTextSchema,
     LLM_MODEL: OptionalTextSchema,
+    LLM_BASE_URL: z.union([z.url(), EmptyStringToUndefinedSchema]).optional(),
   })
   .superRefine((config, context) => {
     if (config.NODE_ENV === "production" && !config.TELEGRAM_BOT_TOKEN) {
@@ -38,6 +39,13 @@ export const AppConfigSchema = z
         code: "custom",
         path: ["LLM_MODEL"],
         message: "LLM_PROVIDER and LLM_MODEL must be set together",
+      });
+    }
+    if (Boolean(config.LLM_PROVIDER) !== Boolean(config.LLM_BASE_URL)) {
+      context.addIssue({
+        code: "custom",
+        path: ["LLM_BASE_URL"],
+        message: "LLM_BASE_URL must be set when LLM_PROVIDER is set",
       });
     }
   });

@@ -13,6 +13,7 @@ describe("application config", () => {
       TELEGRAM_BOT_TOKEN: "",
       LLM_PROVIDER: "",
       LLM_MODEL: "",
+      LLM_BASE_URL: "",
     });
     expect(config.PORT).toBe(3000);
     expect(config.TELEGRAM_BOT_TOKEN).toBeUndefined();
@@ -22,9 +23,16 @@ describe("application config", () => {
     expect(() => loadConfig({ ...required, NODE_ENV: "production" })).toThrow();
   });
 
-  it("requires both LLM provider fields or neither", () => {
+  it("requires all LLM fields or none", () => {
     expect(() =>
       loadConfig({ ...required, LLM_PROVIDER: "provider" }),
+    ).toThrow();
+    expect(() =>
+      loadConfig({
+        ...required,
+        LLM_PROVIDER: "provider",
+        LLM_MODEL: "model",
+      }),
     ).toThrow();
   });
 });
