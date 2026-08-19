@@ -352,7 +352,13 @@ function route(
 }
 
 function fresh<T>(data: readonly T[]): AdapterResult<T> {
-  return { status: "fresh", data, fetchedAt, failures: [] };
+  return {
+    status: "fresh",
+    availability: data.length > 0 ? "available" : "none",
+    data,
+    fetchedAt,
+    failures: [],
+  };
 }
 
 function shiftHours(value: string, hours: number): string {

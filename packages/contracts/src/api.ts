@@ -33,6 +33,9 @@ export const CreateTripResponseSchema = z.strictObject({
 export const JoinTripInputSchema = z.strictObject({
   inviteToken: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
 });
+export const InviteTokenResponseSchema = z.strictObject({
+  inviteToken: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
+});
 
 export const UpdatePreferencesInputSchema = z
   .strictObject({

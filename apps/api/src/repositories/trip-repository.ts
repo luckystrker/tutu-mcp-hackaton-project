@@ -6,6 +6,7 @@ import type {
   ParticipantPrivate,
   ScoringConfig,
   SetReactionInput,
+  TripEvent,
   Trip,
   UpdatePreferencesInput,
   UpdateTripSettingsInput,
@@ -59,7 +60,12 @@ export type TripAggregate = {
   isOrganizer: boolean;
 };
 
-export type RecomputeJob = { id: string; tripId: string; revision: number };
+export type RecomputeJob = {
+  id: string;
+  tripId: string;
+  revision: number;
+  queuedAt: string;
+};
 
 export class TripRepository {
   constructor(private readonly database: Database) {}
@@ -172,6 +178,20 @@ export class TripRepository {
     });
   }
 
+  async rotateInviteToken(actorId: string, tripId: string): Promise<string> {
+    return this.database.transaction(async (client) => {
+      const trip = await lockedTrip(client, tripId);
+      requireOrganizer(trip, actorId);
+      requireEditable(trip);
+      const token = randomBytes(16).toString("base64url");
+      await client.query(
+        `UPDATE rendezvous.trips SET invite_token_hash=$2,updated_at=now() WHERE id=$1`,
+        [tripId, hashToken(token)],
+      );
+      return token;
+    });
+  }
+
   async getAggregate(actorId: string, tripId: string): Promise<TripAggregate> {
     const tripResult = await this.database.query<TripRow>(
       `SELECT * FROM rendezvous.trips WHERE id=$1`,
@@ -187,7 +207,7 @@ export class TripRepository {
       ({ userId }) => userId === actorId,
     );
     if (!actorParticipant) notFound();
-    const destinations = await this.latestDestinations(tripId);
+    const destinations = await this.latestDestinations(tripId, actorId);
     const trip = mapTrip(tripResult.rows[0]);
     return {
       trip,
@@ -260,6 +280,7 @@ export class TripRepository {
     return this.database.transaction(async (client) => {
       const trip = await lockedTrip(client, tripId);
       requireOrganizer(trip, actorId);
+      requireEditable(trip);
       const periodFrom = input.periodFrom ?? trip.period_from.toISOString();
       const periodTo = input.periodTo ?? trip.period_to.toISOString();
       if (Date.parse(periodFrom) >= Date.parse(periodTo))
@@ -277,6 +298,7 @@ export class TripRepository {
       await client.query(
         `UPDATE rendezvous.trips SET title=$2,min_together_minutes=$3,period_from=$4,period_to=$5,
            allow_international=$6,revision=$7,
+           status=CASE WHEN $8::int >= 2 THEN 'LIVE' ELSE status END,
            compute_status=CASE WHEN $8::int >= 2 THEN 'running' ELSE compute_status END,
            updated_at=now() WHERE id=$1`,
         [
@@ -337,12 +359,20 @@ export class TripRepository {
     tripId: string,
     input: SetReactionInput,
   ): Promise<void> {
-    await this.requireMembership(actorId, tripId);
-    await this.database.query(
-      `INSERT INTO rendezvous.reactions(trip_id,city_id,user_id,value) VALUES($1,$2,$3,$4)
-       ON CONFLICT(trip_id,city_id,user_id) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`,
-      [tripId, input.cityId, actorId, input.value],
-    );
+    await this.database.transaction(async (client) => {
+      const trip = await lockedTrip(client, tripId);
+      await requireMembership(client, actorId, tripId);
+      requireEditable(trip);
+      await client.query(
+        `INSERT INTO rendezvous.reactions(trip_id,city_id,user_id,value) VALUES($1,$2,$3,$4)
+         ON CONFLICT(trip_id,city_id,user_id) DO UPDATE SET value=EXCLUDED.value,updated_at=now()`,
+        [tripId, input.cityId, actorId, input.value],
+      );
+      await insertEvent(client, tripId, trip.revision, "reaction_added", {
+        cityId: input.cityId,
+        value: input.value,
+      });
+    });
   }
 
   async deleteReaction(
@@ -365,6 +395,19 @@ export class TripRepository {
     await this.database.transaction(async (client) => {
       const trip = await lockedTrip(client, tripId);
       requireOrganizer(trip, actorId);
+      requireEditable(trip);
+      if (trip.status !== "LIVE")
+        throw new ApplicationError(
+          "INVALID_STATE",
+          409,
+          "Only a live trip can be shortlisted",
+        );
+      if (cityIds.length === 0)
+        throw new ApplicationError(
+          "EMPTY_SHORTLIST",
+          422,
+          "Shortlist cannot be empty",
+        );
       await client.query(`DELETE FROM rendezvous.shortlist WHERE trip_id=$1`, [
         tripId,
       ]);
@@ -395,6 +438,14 @@ export class TripRepository {
           409,
           "Trip is not shortlisted",
         );
+      if (action === "cancel" && trip.status === "FINALIZED")
+        throw new ApplicationError(
+          "TRIP_FINALIZED",
+          409,
+          "Finalized trip cannot be cancelled",
+        );
+      if (trip.status === "CANCELLED")
+        throw new ApplicationError("TRIP_CLOSED", 409, "Trip is cancelled");
       await client.query(
         `UPDATE rendezvous.trips SET status=$2,updated_at=now() WHERE id=$1`,
         [tripId, action === "reopen" ? "LIVE" : "CANCELLED"],
@@ -411,7 +462,7 @@ export class TripRepository {
           409,
           "Organizer must cancel the trip",
         );
-      if (trip.status === "FINALIZED")
+      if (trip.status === "FINALIZED" || trip.status === "CANCELLED")
         throw new ApplicationError(
           "TRIP_FINALIZED",
           409,
@@ -430,7 +481,8 @@ export class TripRepository {
       const readyCount = Number(ready.rows[0]!.count);
       await client.query(
         `UPDATE rendezvous.trips SET revision=$2,
-           compute_status=CASE WHEN $3::int >= 2 THEN 'running' ELSE compute_status END,
+           status=CASE WHEN $3::int < 2 THEN 'COLLECTING' ELSE 'LIVE' END,
+           compute_status=CASE WHEN $3::int >= 2 THEN 'running' ELSE 'idle' END,
            updated_at=now() WHERE id=$1`,
         [tripId, revision, readyCount],
       );
@@ -505,8 +557,9 @@ export class TripRepository {
         id: string;
         trip_id: string;
         revision: number;
+        created_at: Date;
       }>(
-        `SELECT j.id,j.trip_id,j.revision FROM rendezvous.recompute_jobs j
+        `SELECT j.id,j.trip_id,j.revision,j.created_at FROM rendezvous.recompute_jobs j
          JOIN rendezvous.trips t ON t.id=j.trip_id AND t.revision=j.revision
          WHERE j.status='QUEUED' ORDER BY j.created_at FOR UPDATE OF j SKIP LOCKED LIMIT 1`,
       );
@@ -516,7 +569,12 @@ export class TripRepository {
         `UPDATE rendezvous.recompute_jobs SET status='RUNNING',attempts=attempts+1,started_at=now(),run_id=$2 WHERE id=$1`,
         [job.id, randomUUID()],
       );
-      return { id: job.id, tripId: job.trip_id, revision: job.revision };
+      return {
+        id: job.id,
+        tripId: job.trip_id,
+        revision: job.revision,
+        queuedAt: job.created_at.toISOString(),
+      };
     });
   }
 
@@ -551,6 +609,7 @@ export class TripRepository {
     output: SolverOutput,
     destinations: readonly DestinationResultDto[],
     workflowDegraded = false,
+    candidateAlgorithmVersion = "unknown",
   ): Promise<"persisted" | "stale"> {
     return this.database.transaction(async (client) => {
       const trip = await lockedTrip(client, job.tripId);
@@ -567,8 +626,8 @@ export class TripRepository {
         new Date().toISOString();
       await client.query(
         `INSERT INTO rendezvous.trip_results(id,trip_id,revision,ranking_version,algorithm_version,
-           scoring_algorithm_version,source_fetched_at,degraded,solver_output)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+           scoring_algorithm_version,candidate_algorithm_version,source_fetched_at,degraded,solver_output)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           resultId,
           job.tripId,
@@ -576,6 +635,7 @@ export class TripRepository {
           trip.ranking_version,
           output.algorithmVersion,
           output.scoringAlgorithmVersion,
+          candidateAlgorithmVersion,
           sourceFetchedAt,
           degraded,
           JSON.stringify(output),
@@ -665,10 +725,17 @@ export class TripRepository {
       const sourceFetchedAt =
         destinations.map(({ checkedAt }) => checkedAt).sort()[0] ??
         new Date().toISOString();
+      const provenance = await client.query<{
+        candidate_algorithm_version: string;
+      }>(
+        `SELECT candidate_algorithm_version FROM rendezvous.trip_results
+         WHERE trip_id=$1 AND revision=$2 ORDER BY ranking_version DESC LIMIT 1`,
+        [tripId, revision],
+      );
       await client.query(
         `INSERT INTO rendezvous.trip_results(id,trip_id,revision,ranking_version,algorithm_version,
-           scoring_algorithm_version,source_fetched_at,degraded,solver_output)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+           scoring_algorithm_version,candidate_algorithm_version,source_fetched_at,degraded,solver_output)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           resultId,
           tripId,
@@ -676,6 +743,7 @@ export class TripRepository {
           rankingVersion,
           output.algorithmVersion,
           output.scoringAlgorithmVersion,
+          provenance.rows[0]?.candidate_algorithm_version ?? "unknown",
           sourceFetchedAt,
           degraded,
           JSON.stringify(output),
@@ -702,6 +770,14 @@ export class TripRepository {
     });
   }
 
+  async markJobStale(job: RecomputeJob): Promise<void> {
+    await this.database.query(
+      `UPDATE rendezvous.recompute_jobs SET status='STALE',finished_at=now()
+       WHERE id=$1 AND status IN ('QUEUED','RUNNING')`,
+      [job.id],
+    );
+  }
+
   async emitProgress(
     tripId: string,
     revision: number,
@@ -714,8 +790,37 @@ export class TripRepository {
     );
   }
 
+  async listEventsAfter(
+    actorId: string,
+    tripId: string,
+    afterId: number,
+    limit = 100,
+  ): Promise<readonly TripEvent[]> {
+    await this.requireMembership(actorId, tripId);
+    const result = await this.database.query<{
+      id: string;
+      revision: number;
+      type: TripEvent["type"];
+      payload: TripEvent["payload"];
+      occurred_at: Date;
+    }>(
+      `SELECT id::text,revision,type,payload,occurred_at FROM rendezvous.event_outbox
+       WHERE trip_id=$1 AND id>$2 ORDER BY id LIMIT $3`,
+      [tripId, afterId, Math.min(Math.max(limit, 1), 100)],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      tripId,
+      revision: row.revision,
+      type: row.type,
+      payload: row.payload,
+      occurredAt: row.occurred_at.toISOString(),
+    })) as readonly TripEvent[];
+  }
+
   private async latestDestinations(
     tripId: string,
+    actorId: string,
   ): Promise<readonly DestinationResultDto[]> {
     const result = await this.database.query<{
       id: string;
@@ -729,10 +834,35 @@ export class TripRepository {
        ORDER BY d.rank LIMIT 3`,
       [tripId],
     );
-    return result.rows.map(({ id, solution_facts }) => ({
-      ...solution_facts,
-      resultId: id,
-    }));
+    const reactions = await this.database.query<{
+      city_id: string;
+      love: string;
+      ok: string;
+      no: string;
+      mine: "love" | "ok" | "no" | null;
+    }>(
+      `SELECT city_id,
+         count(*) FILTER (WHERE value='love')::text AS love,
+         count(*) FILTER (WHERE value='ok')::text AS ok,
+         count(*) FILTER (WHERE value='no')::text AS no,
+         max(value) FILTER (WHERE user_id=$2) AS mine
+       FROM rendezvous.reactions WHERE trip_id=$1 GROUP BY city_id`,
+      [tripId, actorId],
+    );
+    const byCity = new Map(reactions.rows.map((row) => [row.city_id, row]));
+    return result.rows.map(({ id, solution_facts }) => {
+      const counts = byCity.get(solution_facts.city.id);
+      return {
+        ...solution_facts,
+        resultId: id,
+        reactions: {
+          love: Number(counts?.love ?? 0),
+          ok: Number(counts?.ok ?? 0),
+          no: Number(counts?.no ?? 0),
+          mine: counts?.mine ?? null,
+        },
+      };
+    });
   }
 
   private async requireMembership(
@@ -771,6 +901,23 @@ function requireOrganizer(trip: TripRow, actorId: string): void {
       403,
       "Organizer capability is required",
     );
+}
+
+function requireEditable(trip: TripRow): void {
+  if (trip.status === "FINALIZED" || trip.status === "CANCELLED")
+    throw new ApplicationError("TRIP_CLOSED", 409, "Trip is closed");
+}
+
+async function requireMembership(
+  client: Queryable,
+  actorId: string,
+  tripId: string,
+): Promise<void> {
+  const result = await client.query(
+    `SELECT 1 FROM rendezvous.participants WHERE trip_id=$1 AND user_id=$2`,
+    [tripId, actorId],
+  );
+  if (!result.rowCount) notFound();
 }
 
 async function enqueueJob(

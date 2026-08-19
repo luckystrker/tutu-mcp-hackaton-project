@@ -558,6 +558,9 @@ describe("deterministic solver", () => {
       algorithmVersion: "solver-v1",
     });
     expect(result.allFeasible).toHaveLength(8);
-    expect(performance.now() - startedAt).toBeLessThan(1000);
+    // This is a regression smoke, not a micro-benchmark: shared CI runners can
+    // be several times slower under contention. The end-to-end 60s budget is
+    // measured separately by the recompute workflow.
+    expect(performance.now() - startedAt).toBeLessThan(3000);
   });
 });

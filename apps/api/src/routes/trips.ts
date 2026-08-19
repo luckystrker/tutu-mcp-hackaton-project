@@ -4,6 +4,7 @@ import {
   EntityIdSchema,
   FinalizeTripInputSchema,
   JoinTripInputSchema,
+  InviteTokenResponseSchema,
   ParticipantSelfDtoSchema,
   SetReactionInputSchema,
   SetShortlistInputSchema,
@@ -22,6 +23,9 @@ import type { TripService } from "../application/trip-service.js";
 const ParamsSchema = z.strictObject({ tripId: EntityIdSchema });
 const ReactionParamsSchema = ParamsSchema.extend({ cityId: EntityIdSchema });
 const TripViewSchema = z.union([TripOrganizerDtoSchema, TripGroupDtoSchema]);
+const EventQuerySchema = z.strictObject({
+  after: z.coerce.number().int().nonnegative().default(0),
+});
 
 export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
   app,
@@ -49,6 +53,61 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
     );
   });
 
+  app.get("/api/trips/:tripId/events", async (request, reply) => {
+    const { tripId } = ParamsSchema.parse(request.params);
+    const actor = actorFromHeaders(request.headers);
+    const headerCursor = Number(request.headers["last-event-id"] ?? 0);
+    let cursor =
+      EventQuerySchema.parse(request.query).after ||
+      (Number.isSafeInteger(headerCursor) && headerCursor >= 0
+        ? headerCursor
+        : 0);
+    const initialEvents = await options.service.listEventsAfter(
+      actor,
+      tripId,
+      cursor,
+    );
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive",
+      "x-accel-buffering": "no",
+    });
+    let closed = false;
+    request.raw.once("close", () => {
+      closed = true;
+    });
+    const writeEvents = (
+      events: Awaited<ReturnType<typeof options.service.listEventsAfter>>,
+    ) => {
+      for (const event of events) {
+        cursor = Number(event.id);
+        reply.raw.write(
+          `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+        );
+      }
+    };
+    const publish = async () => {
+      const events = await options.service.listEventsAfter(
+        actor,
+        tripId,
+        cursor,
+      );
+      writeEvents(events);
+    };
+    writeEvents(initialEvents);
+    const timer = setInterval(() => {
+      if (closed) return clearInterval(timer);
+      void publish().catch((error: unknown) => {
+        request.log.error({ err: error }, "SSE publisher failed");
+        clearInterval(timer);
+        reply.raw.end();
+      });
+    }, 1_000);
+    timer.unref();
+  });
+
   app.post("/api/trips/:tripId/join", async (request) => {
     const { tripId } = ParamsSchema.parse(request.params);
     const { inviteToken } = JoinTripInputSchema.parse(request.body);
@@ -59,6 +118,16 @@ export const tripRoutes: FastifyPluginAsync<{ service: TripService }> = async (
         inviteToken,
       ),
     );
+  });
+
+  app.post("/api/trips/:tripId/invite-token", async (request) => {
+    const { tripId } = ParamsSchema.parse(request.params);
+    return InviteTokenResponseSchema.parse({
+      inviteToken: await options.service.rotateInviteToken(
+        actorFromHeaders(request.headers),
+        tripId,
+      ),
+    });
   });
 
   app.get("/api/trips/:tripId/me/preferences", async (request) => {

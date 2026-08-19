@@ -24,6 +24,7 @@ const job: RecomputeJob = {
   id: "30000000-0000-4000-8000-000000000001",
   tripId: DEMO_TRIP.id,
   revision: DEMO_TRIP.revision,
+  queuedAt: "2026-09-01T12:00:00.000Z",
 };
 const fetchedAt = "2026-09-01T12:00:00.000Z";
 const snapshot = {
@@ -50,6 +51,7 @@ describe("recompute workflow", () => {
         expect.objectContaining({ valid: true, degraded: false }),
       ]),
       false,
+      "geo-v1.1.0",
     );
   });
 
@@ -65,6 +67,7 @@ describe("recompute workflow", () => {
       expect.any(Object),
       expect.arrayContaining([expect.objectContaining({ degraded: true })]),
       true,
+      "geo-v1.1.0",
     );
   });
 
@@ -94,6 +97,7 @@ describe("recompute workflow", () => {
       expect.objectContaining({ ranked: [] }),
       [],
       true,
+      "geo-v1.1.0",
     );
   });
 
@@ -107,6 +111,7 @@ describe("recompute workflow", () => {
     });
     expect(adapter.searchOutbound).not.toHaveBeenCalled();
     expect(repository.persistIfCurrent).not.toHaveBeenCalled();
+    expect(repository.markJobStale).toHaveBeenCalledWith(job);
   });
 });
 
@@ -139,6 +144,7 @@ function repositoryFixture(options?: {
     ),
     getPrivateTrip: vi.fn(async () => snapshot),
     persistIfCurrent: vi.fn(async () => "persisted" as const),
+    markJobStale: vi.fn(async () => undefined),
   };
 }
 
@@ -213,6 +219,8 @@ function adapterResult<T>(
 ): AdapterResult<T> {
   return {
     status,
+    availability:
+      data.length > 0 ? "available" : status === "partial" ? "unknown" : "none",
     data,
     fetchedAt,
     failures:

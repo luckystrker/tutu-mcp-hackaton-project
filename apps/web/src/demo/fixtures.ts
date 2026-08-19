@@ -4,19 +4,14 @@ import {
   type CreateTripInput,
   type DestinationResultDto,
   type ScoringConfig,
+  type SetReactionInput,
   type TripOrganizerDto,
   type UpdatePreferencesInput,
 } from "@rendezvous/contracts";
 import type { RendezvousApi, TripView } from "../features/trips/api.js";
-
-export const DEMO_TRIP_IDS = {
-  live: "40000000-0000-4000-8000-000000000001",
-  running: "40000000-0000-4000-8000-000000000002",
-  degraded: "40000000-0000-4000-8000-000000000003",
-  empty: "40000000-0000-4000-8000-000000000004",
-  failed: "40000000-0000-4000-8000-000000000005",
-  final: "40000000-0000-4000-8000-000000000006",
-} as const;
+import { DEMO_PARTICIPANTS } from "@rendezvous/domain/fixtures";
+import { DEMO_TRIP_IDS } from "./ids.js";
+export { DEMO_TRIP_IDS } from "./ids.js";
 
 const participantIds = [
   "41000000-0000-4000-8000-000000000001",
@@ -87,6 +82,7 @@ function destination(
     valid: true,
     checkedAt: now,
     degraded: false,
+    reactions: { love: index + 1, ok: 1, no: 0, mine: null },
   };
 }
 
@@ -124,14 +120,12 @@ function makeView(
       createdAt: now,
       updatedAt: now,
     },
-    participants: ["Данил", "Саша", "Катя", "Маша"].map(
-      (displayName, index) => ({
-        id: participantIds[index],
-        displayName,
-        ready: index < (options.ready ?? 3),
-        suitability: index < (options.ready ?? 3) ? "suitable" : "unknown",
-      }),
-    ),
+    participants: DEMO_PARTICIPANTS.map(({ displayName }, index) => ({
+      id: participantIds[index],
+      displayName,
+      ready: index < (options.ready ?? 3),
+      suitability: index < (options.ready ?? 3) ? "suitable" : "unknown",
+    })),
     me: {
       id: participantIds[0],
       tripId: id,
@@ -154,7 +148,7 @@ function makeView(
       canEditSettings: options.status !== "FINALIZED",
       canShortlist: (options.status ?? "LIVE") === "LIVE",
       canFinalize: options.status === "SHORTLIST",
-      canCancel: options.status !== "CANCELLED",
+      canCancel: !["FINALIZED", "CANCELLED"].includes(options.status ?? "LIVE"),
     },
   });
 }
@@ -188,11 +182,23 @@ export class FixtureRendezvousApi implements RendezvousApi {
     ]),
   );
 
+  async listTrips() {
+    await fixtureDelay();
+    return [...this.#views.values()]
+      .map(({ trip }) => TripOrganizerDtoSchema.shape.trip.parse(trip))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
   async getTrip(id: string): Promise<TripView> {
     await fixtureDelay();
     return TripOrganizerDtoSchema.parse(
       this.#views.get(id) ?? FIXTURE_TRIPS[DEMO_TRIP_IDS.live],
     );
+  }
+
+  async getInviteToken(id: string): Promise<string> {
+    await this.getTrip(id);
+    return "abcdefghijklmnopqrstuv";
   }
 
   async createTrip(input: CreateTripInput) {
@@ -205,8 +211,8 @@ export class FixtureRendezvousApi implements RendezvousApi {
     });
   }
 
-  async joinTrip(_inviteToken: string): Promise<TripView> {
-    return this.getTrip(DEMO_TRIP_IDS.live);
+  async joinTrip(id: string, _inviteToken: string): Promise<TripView> {
+    return this.getTrip(id);
   }
 
   async updateMyPreferences(
@@ -227,6 +233,57 @@ export class FixtureRendezvousApi implements RendezvousApi {
       .map((item) => ({ ...item, score: weightedScore(item, scoring) }))
       .sort((left, right) => right.score - left.score)
       .map((item, index) => ({ ...item, rank: index + 1 }));
+    this.#views.set(id, view);
+    return TripOrganizerDtoSchema.parse(view);
+  }
+
+  async setReaction(id: string, input: SetReactionInput): Promise<TripView> {
+    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    const destination = view.destinations.find(
+      ({ city }) => city.id === input.cityId,
+    );
+    if (destination) {
+      const current = destination.reactions ?? {
+        love: 0,
+        ok: 0,
+        no: 0,
+        mine: null,
+      };
+      if (current.mine)
+        current[current.mine] = Math.max(0, current[current.mine] - 1);
+      current[input.value] += 1;
+      current.mine = input.value;
+      destination.reactions = current;
+    }
+    this.#views.set(id, view);
+    return TripOrganizerDtoSchema.parse(view);
+  }
+
+  async setShortlist(
+    id: string,
+    cityIds: readonly string[],
+  ): Promise<TripView> {
+    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    view.trip.status = "SHORTLIST";
+    view.destinations = view.destinations.filter(({ city }) =>
+      cityIds.includes(city.id),
+    );
+    view.capabilities.canShortlist = false;
+    view.capabilities.canFinalize = true;
+    this.#views.set(id, view);
+    return TripOrganizerDtoSchema.parse(view);
+  }
+
+  async finalize(id: string, destinationResultId: string): Promise<TripView> {
+    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    const selected = view.destinations.find(
+      ({ resultId }) => resultId === destinationResultId,
+    );
+    if (selected) view.destinations = [selected];
+    view.trip.status = "FINALIZED";
+    view.capabilities.canFinalize = false;
+    view.capabilities.canEditSettings = false;
+    view.capabilities.canCancel = false;
     this.#views.set(id, view);
     return TripOrganizerDtoSchema.parse(view);
   }

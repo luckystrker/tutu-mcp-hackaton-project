@@ -2,8 +2,15 @@ import {
   CreateTripInputSchema,
   UpdatePreferencesInputSchema,
   type ScoringConfig,
+  type TripPublic,
   type TransportMode,
 } from "@rendezvous/contracts";
+import { useQuery } from "@tanstack/react-query";
+import {
+  advancedSlidersToWeights,
+  presetToWeights,
+  type ScoringPreset,
+} from "@rendezvous/solver/presets";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useApi } from "../app/providers.js";
@@ -14,12 +21,18 @@ import { ParticipantSpokes } from "../components/ParticipantSpokes.js";
 import { ScoreBreakdown } from "../components/ScoreBreakdown.js";
 import {
   usePreferencesMutation,
+  useReactionMutation,
   useScoringMutation,
+  useShortlistMutation,
+  useFinalizeMutation,
   useTrip,
+  useTrips,
 } from "../features/trips/queries.js";
 import { useTripUi } from "../features/trips/ui-store.js";
+import { parseNaturalPreference } from "../features/trips/natural-preference.js";
+import { useRankingViewState } from "../features/ranking/model.js";
 import type { TripView } from "../features/trips/api.js";
-import { DEMO_TRIP_IDS } from "../demo/fixtures.js";
+import { DEMO_TRIP_IDS } from "../demo/ids.js";
 import {
   formatDateTime,
   formatDay,
@@ -36,6 +49,60 @@ const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
 };
 
 export function StartPage() {
+  const { data: trips, isLoading } = useTrips();
+  const recent = trips?.slice(0, 2) ?? [];
+  return (
+    <AppFrame>
+      <main className="home-page">
+        <section className="home-hero">
+          <p className="eyebrow">Добрый вечер</p>
+          <h1>
+            Встретимся
+            <br />
+            <em>посередине</em>
+          </h1>
+          <p className="lead">
+            Соберите всех в одной поездке — мы найдём город, который подходит
+            каждому.
+          </p>
+        </section>
+        <nav className="home-actions" aria-label="Главное меню">
+          <Link className="home-action home-action--primary" to="/new">
+            <span>＋</span>
+            <div>
+              <strong>Новая поездка</strong>
+              <small>Создать и позвать друзей</small>
+            </div>
+            <i>→</i>
+          </Link>
+          <Link className="home-action" to="/trips">
+            <span>⌁</span>
+            <div>
+              <strong>Мои поездки</strong>
+              <small>
+                {isLoading ? "Загружаем…" : `${trips?.length ?? 0} поездок`}
+              </small>
+            </div>
+            <i>→</i>
+          </Link>
+        </nav>
+        {recent.length > 0 && (
+          <section className="recent-trips">
+            <header>
+              <h2>Продолжить</h2>
+              <Link to="/trips">Все</Link>
+            </header>
+            {recent.map((trip) => (
+              <TripListItem key={trip.id} trip={trip} />
+            ))}
+          </section>
+        )}
+      </main>
+    </AppFrame>
+  );
+}
+
+export function CreateTripPage() {
   const api = useApi();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -62,7 +129,7 @@ export function StartPage() {
     }
   }
   return (
-    <AppFrame>
+    <AppFrame title="Новая поездка" back>
       <main className="start-page">
         <p className="eyebrow">Встретиться посередине</p>
         <h1>
@@ -110,7 +177,10 @@ export function StartPage() {
             {busy ? "Создаём…" : "Создать поездку"}
           </button>
         </form>
-        <section className="demo-links">
+        <section
+          className="demo-links"
+          hidden={import.meta.env.VITE_API_MODE !== "fixture"}
+        >
           <p>Посмотреть fixture-сценарии</p>
           <div>
             {Object.entries(DEMO_TRIP_IDS).map(([name, id]) => (
@@ -128,8 +198,184 @@ export function StartPage() {
   );
 }
 
+export function TripsPage() {
+  const { data: trips, isLoading, error } = useTrips();
+  return (
+    <AppFrame title="Мои поездки" back>
+      <main className="trips-page">
+        <div className="page-heading">
+          <div>
+            <p className="eyebrow">Все встречи</p>
+            <h1>Поездки</h1>
+          </div>
+          <Link className="round-link" to="/new" aria-label="Создать поездку">
+            ＋
+          </Link>
+        </div>
+        {isLoading ? (
+          <div className="inline-loading">Загружаем поездки…</div>
+        ) : error ? (
+          <LoadFailed />
+        ) : trips?.length ? (
+          <div className="trip-list">
+            {trips.map((trip) => (
+              <TripListItem key={trip.id} trip={trip} />
+            ))}
+          </div>
+        ) : (
+          <section className="empty-state">
+            <span>＋</span>
+            <h3>Пока нет поездок</h3>
+            <p>Создайте первую и отправьте приглашение друзьям.</p>
+            <Link className="primary-button as-link" to="/new">
+              Создать поездку
+            </Link>
+          </section>
+        )}
+      </main>
+    </AppFrame>
+  );
+}
+
+export function TripMenuPage() {
+  const id = useTripId();
+  const { data: view, isLoading, error } = useTrip(id);
+  if (isLoading) return <Loading />;
+  if (error || !view) return <LoadFailed />;
+  const items = [
+    ["◎", "Обзор и рейтинг", "Города и статус участников", "live"],
+    ["✎", "Мои условия", "Время, бюджет и транспорт", "me"],
+    ["↗", "Позвать друзей", "Ссылка на эту поездку", "invite"],
+    ["⇄", "Сравнить города", "Ключевые показатели рядом", "compare"],
+    ["♡", "Общий выбор", "Реакции и shortlist", "shortlist"],
+  ] as const;
+  return (
+    <AppFrame title="Меню поездки" tripId={id}>
+      <main className="trip-menu-page">
+        <section className="trip-menu-summary">
+          <p className="eyebrow">{statusLabel(view.trip.status)}</p>
+          <h1>{view.trip.title}</h1>
+          <p>
+            {view.participants.filter(({ ready }) => ready).length} из{" "}
+            {view.trip.expectedParticipants} участников готовы
+          </p>
+        </section>
+        <nav className="trip-menu-list" aria-label="Разделы поездки">
+          {items.map(([icon, title, subtitle, path]) => (
+            <Link key={path} to={`/trips/${id}/${path}`}>
+              <span>{icon}</span>
+              <div>
+                <strong>{title}</strong>
+                <small>{subtitle}</small>
+              </div>
+              <i>→</i>
+            </Link>
+          ))}
+          {view.trip.status === "FINALIZED" && (
+            <Link to={`/trips/${id}/final`}>
+              <span>✓</span>
+              <div>
+                <strong>Итог поездки</strong>
+                <small>Зафиксированный маршрут</small>
+              </div>
+              <i>→</i>
+            </Link>
+          )}
+        </nav>
+        <Link className="back-to-trips" to="/trips">
+          ← Ко всем поездкам
+        </Link>
+      </main>
+    </AppFrame>
+  );
+}
+
+export function InvitePage() {
+  const id = useTripId();
+  const api = useApi();
+  const { data: view, isLoading: tripLoading } = useTrip(id);
+  const { data: token, isLoading: tokenLoading } = useQuery({
+    queryKey: ["trip", id, "invite"],
+    queryFn: () => api.getInviteToken(id),
+  });
+  const [feedback, setFeedback] = useState("");
+  if (tripLoading || tokenLoading || !view || !token) return <Loading />;
+  const inviteUrl = `${window.location.origin}/join/${id}/${token}`;
+  const tripTitle = view.trip.title;
+  async function share() {
+    if (navigator.share) {
+      await navigator.share({
+        title: tripTitle,
+        text: "Присоединяйся к нашей поездке в Rendezvous",
+        url: inviteUrl,
+      });
+      return;
+    }
+    await copyInvite(inviteUrl);
+    setFeedback("Ссылка скопирована");
+  }
+  return (
+    <AppFrame title="Приглашение" back tripId={id}>
+      <main className="invite-page">
+        <div className="invite-visual">
+          <span>Д</span>
+          <span>＋</span>
+          <span>?</span>
+        </div>
+        <p className="eyebrow">Соберите компанию</p>
+        <h1>Позвать в поездку</h1>
+        <p className="lead">
+          Друг откроет ссылку, присоединится к «{view.trip.title}» и заполнит
+          только свои условия.
+        </p>
+        <button className="primary-button" onClick={() => void share()}>
+          ↗ Поделиться ссылкой
+        </button>
+        <button
+          className="copy-invite"
+          onClick={async () => {
+            await copyInvite(inviteUrl);
+            setFeedback("Ссылка скопирована");
+          }}
+        >
+          <span>{inviteUrl}</span>
+          <strong>Копировать</strong>
+        </button>
+        <p className="invite-feedback" aria-live="polite">
+          {feedback}
+        </p>
+        <aside className="invite-privacy">
+          <strong>Личные данные останутся личными</strong>
+          <p>
+            Приглашённые не увидят бюджеты, временные окна и пожелания друг
+            друга.
+          </p>
+        </aside>
+      </main>
+    </AppFrame>
+  );
+}
+
+function TripListItem({ trip }: { trip: TripPublic }) {
+  const destination = trip.status === "FINALIZED" ? "final" : "live";
+  return (
+    <Link className="trip-list-item" to={`/trips/${trip.id}/${destination}`}>
+      <span
+        className={`trip-list-item__status trip-list-item__status--${trip.computeStatus}`}
+      />
+      <div>
+        <strong>{trip.title}</strong>
+        <small>
+          {statusLabel(trip.status)} · обновлено {formatDay(trip.updatedAt)}
+        </small>
+      </div>
+      <i>→</i>
+    </Link>
+  );
+}
+
 export function JoinPage() {
-  const { inviteToken = "" } = useParams();
+  const { tripId = "", inviteToken = "" } = useParams();
   const api = useApi();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -137,7 +383,7 @@ export function JoinPage() {
   async function join() {
     setBusy(true);
     try {
-      const trip = await api.joinTrip(inviteToken);
+      const trip = await api.joinTrip(tripId, inviteToken);
       navigate(`/trips/${trip.trip.id}/me`);
     } catch {
       setBusy(false);
@@ -178,6 +424,12 @@ export function PreferencesPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const natural = parseNaturalPreference(
+      String(data.get("naturalPreference") ?? ""),
+    );
+    const tags = [
+      ...new Set([...data.getAll("tags"), ...(natural.destinationTags ?? [])]),
+    ];
     const parsed = UpdatePreferencesInputSchema.safeParse({
       originCityId: data.get("origin"),
       availableFrom: safeIso(data.get("from")),
@@ -185,8 +437,15 @@ export function PreferencesPage() {
       maxBudget: { amount: Number(data.get("budget")), currency: "RUB" },
       forbiddenModes: data.getAll("forbidden"),
       softPreferences: {
-        preferDirect: data.get("direct") === "on",
-        destinationTags: data.getAll("tags"),
+        ...natural,
+        preferDirect: data.get("direct") === "on" || natural.preferDirect,
+        avoidNightTravel:
+          data.get("avoidNight") === "on" || natural.avoidNightTravel,
+        preferMorningArrival:
+          data.get("morning") === "on" || natural.preferMorningArrival,
+        maxTravelHoursPreferred:
+          Number(data.get("maxHours")) || natural.maxTravelHoursPreferred,
+        destinationTags: tags,
       },
       ready: true,
     });
@@ -199,7 +458,7 @@ export function PreferencesPage() {
     navigate(`/trips/${id}/live`);
   }
   return (
-    <AppFrame title="Мои условия" back>
+    <AppFrame title="Мои условия" back tripId={id}>
       <main className="form-page">
         <div className="privacy-note">
           <span>◉</span>
@@ -259,6 +518,10 @@ export function PreferencesPage() {
             </label>
             <div className="checks">
               <label>
+                <input type="checkbox" name="forbidden" value="train" /> Без
+                поездов
+              </label>
+              <label>
                 <input type="checkbox" name="forbidden" value="air" /> Без
                 самолётов
               </label>
@@ -278,6 +541,12 @@ export function PreferencesPage() {
                 пересадок
               </label>
               <label>
+                <input type="checkbox" name="avoidNight" /> Без ночных поездок
+              </label>
+              <label>
+                <input type="checkbox" name="morning" /> Прибытие утром
+              </label>
+              <label>
                 <input type="checkbox" name="tags" value="history" /> История
               </label>
               <label>
@@ -287,6 +556,23 @@ export function PreferencesPage() {
                 <input type="checkbox" name="tags" value="quiet" /> Спокойно
               </label>
             </div>
+            <label>
+              Желательно не дольше, часов
+              <input
+                name="maxHours"
+                type="number"
+                min="1"
+                max="168"
+                placeholder="8"
+              />
+            </label>
+            <label>
+              Пожелание своими словами <small>необязательно</small>
+              <input
+                name="naturalPreference"
+                placeholder="Например: хочется гулять у воды"
+              />
+            </label>
           </fieldset>
           {error && <p className="form-error">{error}</p>}
           <button className="primary-button" disabled={mutation.isPending}>
@@ -303,8 +589,10 @@ export function LiveRoomPage() {
   const { data: view, isLoading, error } = useTrip(id);
   const selected = useTripUi((s) => s.selectedCityByTrip[id]);
   const select = useTripUi((s) => s.selectCity);
+  const ranking = useRankingViewState(view?.destinations ?? []);
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
+  if (!view.me.ready) return <Navigate to={`/trips/${id}/me`} replace />;
   if (view.trip.status === "FINALIZED")
     return <Navigate to={`/trips/${id}/final`} replace />;
   const ready = view.participants.filter((p) => p.ready).length;
@@ -312,7 +600,7 @@ export function LiveRoomPage() {
     view.destinations.find((d) => d.city.id === selected) ??
     view.destinations[0];
   return (
-    <AppFrame>
+    <AppFrame title={view.trip.title} tripId={id}>
       <main className="live-page">
         <header className="trip-heading">
           <div>
@@ -321,13 +609,6 @@ export function LiveRoomPage() {
               {ready} из {view.trip.expectedParticipants} <em>готовы</em>
             </h1>
           </div>
-          <label>
-            Пожелание своими словами <small>необязательно</small>
-            <input
-              name="naturalPreference"
-              placeholder="Например: хочется гулять у воды"
-            />
-          </label>
           <Link className="round-link" to={`/trips/${id}/me`}>
             ＋
           </Link>
@@ -368,13 +649,14 @@ export function LiveRoomPage() {
         )}
         {view.destinations.length ? (
           <div className="city-carousel">
-            {view.destinations.map((d) => (
+            {ranking.destinations.map((d) => (
               <div className="card-button" key={d.city.id}>
                 <CityCard
                   tripId={id}
                   destination={d}
                   active={d.city.id === active?.city.id}
                   onSelect={() => select(id, d.city.id)}
+                  previousScore={ranking.previousScores.get(d.city.id)}
                 />
               </div>
             ))}
@@ -393,65 +675,77 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
   const [state, setState] = useState(() => ({
     draft: view.trip.scoringConfig,
     applied: view.trip.scoringConfig,
+    economyComfort: 0.5,
+    efficiencyFairness: 0.5,
   }));
-  const presets: Record<string, ScoringConfig> = {
-    Баланс: {
-      together: 35,
-      cost: 25,
-      travel: 20,
-      synchronization: 10,
-      fairness: 10,
-    },
-    Дешевле: {
-      together: 15,
-      cost: 50,
-      travel: 15,
-      synchronization: 10,
-      fairness: 10,
-    },
-    Больше_времени: {
-      together: 55,
-      cost: 15,
-      travel: 10,
-      synchronization: 10,
-      fairness: 10,
-    },
-  };
+  const presets: ReadonlyArray<[string, ScoringPreset]> = [
+    ["Баланс", "balanced"],
+    ["Подешевле", "cheapest"],
+    ["Справедливо", "fairest"],
+    ["Больше времени", "more-time"],
+  ];
   const apply = (next: ScoringConfig) => {
-    setState({ draft: next, applied: next });
+    setState((current) => ({ ...current, draft: next, applied: next }));
     mutation.mutate(next);
   };
+  const applySliders = () =>
+    apply(
+      advancedSlidersToWeights(state.economyComfort, state.efficiencyFairness),
+    );
   return (
     <details className="scoring-panel">
       <summary>Что для вас важнее?</summary>
       <div className="preset-row">
-        {Object.entries(presets).map(([name, value]) => (
-          <button key={name} onClick={() => apply(value)}>
-            {name.replace("_", " ")}
+        {presets.map(([name, preset]) => (
+          <button key={preset} onClick={() => apply(presetToWeights(preset))}>
+            {name}
           </button>
         ))}
       </div>
-      <label>
-        Стоимость{" "}
+      <div className="advanced-slider">
+        <div>
+          <span>Экономия</span>
+          <span>Комфорт</span>
+        </div>
         <input
-          aria-label="Вес стоимости"
+          aria-label="Экономия или комфорт"
           type="range"
           min="0"
-          max="70"
-          value={state.draft.cost}
+          max="1"
+          step="0.05"
+          value={state.economyComfort}
           onChange={(e) =>
             setState((current) => ({
               ...current,
-              draft: { ...current.draft, cost: Number(e.target.value) },
+              economyComfort: Number(e.target.value),
             }))
           }
           onPointerUp={(event) => event.currentTarget.blur()}
-          onBlur={() => {
-            if (!sameScoring(state.draft, state.applied)) apply(state.draft);
-          }}
+          onBlur={applySliders}
         />
-        <b>{state.draft.cost}</b>
-      </label>
+      </div>
+      <div className="advanced-slider">
+        <div>
+          <span>Эффективность</span>
+          <span>Справедливость</span>
+        </div>
+        <input
+          aria-label="Эффективность или справедливость"
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={state.efficiencyFairness}
+          onChange={(e) =>
+            setState((current) => ({
+              ...current,
+              efficiencyFairness: Number(e.target.value),
+            }))
+          }
+          onPointerUp={(event) => event.currentTarget.blur()}
+          onBlur={applySliders}
+        />
+      </div>
       <small>
         {mutation.isError
           ? "Не удалось обновить веса — попробуйте ещё раз"
@@ -460,16 +754,6 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
             : "Без нового поиска маршрутов"}
       </small>
     </details>
-  );
-}
-
-function sameScoring(left: ScoringConfig, right: ScoringConfig): boolean {
-  return (
-    left.together === right.together &&
-    left.cost === right.cost &&
-    left.travel === right.travel &&
-    left.synchronization === right.synchronization &&
-    left.fairness === right.fairness
   );
 }
 
@@ -482,7 +766,7 @@ export function DestinationPage() {
   const item = view.destinations.find((d) => d.city.id === cityId);
   if (!item) return <Navigate to={`/trips/${id}/live`} />;
   return (
-    <AppFrame title={item.city.name} back>
+    <AppFrame title={item.city.name} back tripId={id}>
       <main className="detail-page">
         <div className="hero-score">
           <span>#{item.rank}</span>
@@ -513,6 +797,7 @@ export function DestinationPage() {
             </article>
           ))}
         </div>
+        <HotelOptions hotels={item.hotels} />
         <p className="privacy-footnote">
           Личные бюджеты и ограничения участников не раскрываются.
         </p>
@@ -527,7 +812,7 @@ export function ComparePage() {
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   return (
-    <AppFrame title="Сравнение" back>
+    <AppFrame title="Сравнение" back tripId={id}>
       <main className="compare-page">
         <p className="eyebrow">На одном экране</p>
         <h1>Чем отличаются</h1>
@@ -566,10 +851,13 @@ export function ShortlistPage() {
   const id = useTripId();
   const { data: view, isLoading, error } = useTrip(id);
   const [selected, setSelected] = useState<string[]>([]);
+  const reaction = useReactionMutation(id);
+  const shortlist = useShortlistMutation(id);
+  const finalize = useFinalizeMutation(id);
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   return (
-    <AppFrame title="Общий выбор" back>
+    <AppFrame title="Общий выбор" back tripId={id}>
       <main className="shortlist-page">
         <p className="eyebrow">Финальный раунд</p>
         <h1>Что оставим?</h1>
@@ -597,16 +885,72 @@ export function ShortlistPage() {
             <i>{selected.includes(d.city.id) ? "✓" : "＋"}</i>
           </button>
         ))}
-        <div className="reaction-row">
-          <button>♥ нравится</button>
-          <button>≈ нормально</button>
-          <button>× не моё</button>
-        </div>
+        {selected[0] &&
+          (() => {
+            const item = view.destinations.find(
+              ({ city }) => city.id === selected[0],
+            );
+            if (!item) return null;
+            const counts = item.reactions ?? {
+              love: 0,
+              ok: 0,
+              no: 0,
+              mine: null,
+            };
+            return (
+              <div
+                className="reaction-row"
+                aria-label={`Реакции: ${item.city.name}`}
+              >
+                {(
+                  [
+                    ["love", "♥"],
+                    ["ok", "≈"],
+                    ["no", "×"],
+                  ] as const
+                ).map(([value, icon]) => (
+                  <button
+                    key={value}
+                    className={counts.mine === value ? "selected" : ""}
+                    disabled={reaction.isPending}
+                    onClick={() =>
+                      reaction.mutate({ cityId: item.city.id, value })
+                    }
+                  >
+                    {icon} {counts[value]}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
         {"capabilities" in view && view.capabilities.canShortlist && (
-          <Link className="primary-button as-link" to={`/trips/${id}/final`}>
-            Зафиксировать выбор
-          </Link>
+          <button
+            className="primary-button"
+            disabled={!selected.length || shortlist.isPending}
+            onClick={() => shortlist.mutate(selected)}
+          >
+            {shortlist.isPending ? "Сохраняем…" : "Сохранить shortlist"}
+          </button>
         )}
+        {"capabilities" in view &&
+          view.capabilities.canFinalize &&
+          selected[0] && (
+            <button
+              className="primary-button"
+              disabled={finalize.isPending}
+              onClick={() => {
+                const resultId = view.destinations.find(
+                  ({ city }) => city.id === selected[0],
+                )?.resultId;
+                if (resultId)
+                  finalize.mutate(resultId, {
+                    onSuccess: () => location.assign(`/trips/${id}/final`),
+                  });
+              }}
+            >
+              Зафиксировать город
+            </button>
+          )}
       </main>
     </AppFrame>
   );
@@ -620,7 +964,7 @@ export function FinalTripPage() {
   const destination = view.destinations[0];
   if (!destination) return <EmptyState />;
   return (
-    <AppFrame>
+    <AppFrame title="Итог поездки" tripId={id}>
       <main className="final-page">
         <p className="eyebrow">Решено</p>
         <div className="final-check">✓</div>
@@ -642,6 +986,23 @@ export function FinalTripPage() {
             <span>до {formatTime(view.trip.periodTo)}</span>
           </div>
         </div>
+        {(() => {
+          const route = destination.routes.find(
+            ({ participantId }) => participantId === view.me.id,
+          );
+          return route ? (
+            <section className="personal-route">
+              <p className="eyebrow">Твой маршрут</p>
+              <strong>{TRANSPORT_MODE_LABELS[route.mode]}</strong>
+              <span>
+                {formatDateTime(route.outboundDepartureAt)} →{" "}
+                {formatDateTime(route.outboundArrivalAt)}
+              </span>
+              <b>{formatMoney(route.estimatedCost)}</b>
+            </section>
+          ) : null;
+        })()}
+        <HotelOptions hotels={destination.hotels} />
         <h2>Почему это честно</h2>
         <ScoreBreakdown scores={destination.components} compact />
         <Link
@@ -652,6 +1013,32 @@ export function FinalTripPage() {
         </Link>
       </main>
     </AppFrame>
+  );
+}
+
+function HotelOptions({
+  hotels,
+}: {
+  hotels: TripView["destinations"][number]["hotels"];
+}) {
+  if (!hotels.length)
+    return <p className="muted-note">Отели для этих дат не найдены.</p>;
+  return (
+    <section className="hotel-options">
+      <p className="eyebrow">Где остановиться</p>
+      {hotels.slice(0, 3).map((hotel) => (
+        <article key={hotel.id}>
+          <div>
+            <strong>{hotel.name}</strong>
+            <small>
+              {hotel.checkIn} — {hotel.checkOut}
+            </small>
+          </div>
+          <span>★ {hotel.rating ?? "—"}</span>
+          <b>{formatMoney(hotel.totalPrice)}</b>
+        </article>
+      ))}
+    </section>
   );
 }
 
@@ -696,4 +1083,27 @@ function useTripId() {
 function safeIso(value: FormDataEntryValue | null): string {
   const date = new Date(String(value ?? ""));
   return Number.isNaN(date.valueOf()) ? "" : date.toISOString();
+}
+
+function statusLabel(status: TripPublic["status"]): string {
+  return {
+    CREATED: "Создана",
+    COLLECTING: "Собираем участников",
+    LIVE: "Идёт выбор",
+    SHORTLIST: "Финальный выбор",
+    FINALIZED: "Маршрут выбран",
+    CANCELLED: "Отменена",
+  }[status];
+}
+
+async function copyInvite(value: string): Promise<void> {
+  if (navigator.clipboard) return navigator.clipboard.writeText(value);
+  const input = document.createElement("textarea");
+  input.value = value;
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.append(input);
+  input.select();
+  document.execCommand("copy");
+  input.remove();
 }

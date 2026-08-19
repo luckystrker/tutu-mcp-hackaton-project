@@ -19,6 +19,8 @@ npm run dev
 ```
 
 Frontend доступен на `http://localhost:5173`, API — на `http://localhost:3000`. Vite проксирует `/api` и `/health` в API.
+По умолчанию frontend работает с настоящим API. Для изолированного просмотра
+всех демонстрационных состояний без backend установите `VITE_API_MODE=fixture`.
 
 ## Проверки
 

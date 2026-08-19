@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useState, type ReactNode } from "react";
-import type { RendezvousApi } from "../features/trips/api.js";
-import { FixtureRendezvousApi } from "../demo/fixtures.js";
+import {
+  HttpRendezvousApi,
+  type RendezvousApi,
+} from "../features/trips/api.js";
 
 const ApiContext = createContext<RendezvousApi | null>(null);
 
@@ -18,9 +20,11 @@ export function AppProviders({
         defaultOptions: { queries: { staleTime: 15_000, retry: false } },
       }),
   );
-  const [fixtureApi] = useState(() => new FixtureRendezvousApi());
+  const [defaultApi] = useState<RendezvousApi>(
+    () => new HttpRendezvousApi(import.meta.env.VITE_API_BASE_URL ?? ""),
+  );
   return (
-    <ApiContext.Provider value={api ?? fixtureApi}>
+    <ApiContext.Provider value={api ?? defaultApi}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </ApiContext.Provider>
   );

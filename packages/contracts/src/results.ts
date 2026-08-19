@@ -22,6 +22,13 @@ export const ParticipantRouteSummarySchema = z.strictObject({
   estimatedCost: MoneySchema,
 });
 
+export const ReactionSummarySchema = z.strictObject({
+  love: z.number().int().nonnegative(),
+  ok: z.number().int().nonnegative(),
+  no: z.number().int().nonnegative(),
+  mine: z.enum(["love", "ok", "no"]).nullable(),
+});
+
 export const DestinationResultDtoSchema = z.strictObject({
   resultId: EntityIdSchema.optional(),
   city: PublicCitySchema,
@@ -34,6 +41,7 @@ export const DestinationResultDtoSchema = z.strictObject({
   valid: z.boolean(),
   checkedAt: IsoDateTimeSchema,
   degraded: z.boolean(),
+  reactions: ReactionSummarySchema.optional(),
 });
 
 export type ScoreBreakdown = z.infer<typeof ScoreBreakdownSchema>;
@@ -41,3 +49,4 @@ export type ParticipantRouteSummary = z.infer<
   typeof ParticipantRouteSummarySchema
 >;
 export type DestinationResultDto = z.infer<typeof DestinationResultDtoSchema>;
+export type ReactionSummary = z.infer<typeof ReactionSummarySchema>;

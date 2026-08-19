@@ -39,7 +39,9 @@ export function projectAggregate(
           ),
           canShortlist: aggregate.trip.status === "LIVE",
           canFinalize: aggregate.trip.status === "SHORTLIST",
-          canCancel: aggregate.trip.status !== "CANCELLED",
+          canCancel: !["FINALIZED", "CANCELLED"].includes(
+            aggregate.trip.status,
+          ),
         },
       }
     : group;

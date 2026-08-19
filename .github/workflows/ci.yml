@@ -30,6 +30,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Scan tracked sources for committed secrets
+        run: npm run secrets:scan
       - run: npm run db:migrate
       - run: npm run lint
       - run: npm run typecheck

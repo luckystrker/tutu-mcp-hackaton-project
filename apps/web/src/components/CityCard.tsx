@@ -7,12 +7,16 @@ export function CityCard({
   destination,
   active = false,
   onSelect,
+  previousScore,
 }: {
   tripId: string;
   destination: DestinationResultDto;
   active?: boolean;
   onSelect?: () => void;
+  previousScore?: number | undefined;
 }) {
+  const delta =
+    previousScore === undefined ? 0 : destination.score - previousScore;
   return (
     <article className={`city-card ${active ? "city-card--active" : ""}`}>
       <div className="city-card__rank">#{destination.rank}</div>
@@ -21,8 +25,12 @@ export function CityCard({
           <p>{destination.city.country}</p>
           <h3>{destination.city.name}</h3>
         </div>
-        <strong>
+        <strong className={delta ? "score-change" : undefined}>
+          {delta ? (
+            <small className="score-before">{previousScore} → </small>
+          ) : null}
           {destination.score}
+          {delta ? <i>{delta > 0 ? " ↑" : " ↓"}</i> : null}
           <small>/100</small>
         </strong>
       </div>

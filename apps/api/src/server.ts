@@ -21,6 +21,7 @@ import { PostgresTravelCache } from "./repositories/postgres-travel-cache.js";
 import { TripRepository } from "./repositories/trip-repository.js";
 import {
   createMastraRecomputeWorkflow,
+  InMemoryRecomputeMetrics,
   RecomputeRunner,
 } from "./workflow/recompute.js";
 import { RecomputeWorker } from "./workflow/worker.js";
@@ -40,12 +41,19 @@ const publicCities = new Map(
   CITY_CATALOG.map(({ id, name, country }) => [id, { id, name, country }]),
 );
 const tripService = new TripService(repository, publicCities);
+const metrics = new InMemoryTutuMetrics();
+const recomputeMetrics = new InMemoryRecomputeMetrics();
 const app = buildApp({
   readinessCheck: () => database.checkReadiness(),
   tripService,
   logger: buildLoggerOptions(config.NODE_ENV),
+  metricsSnapshot: () => ({
+    tutu: metrics.snapshot(),
+    recomputeLatencyReadyToPublishedP95Ms:
+      recomputeMetrics.p95ReadyToPublished(),
+    recomputeLatencyReadyToPublishedTargetMs: 60_000,
+  }),
 });
-const metrics = new InMemoryTutuMetrics();
 const tutuCaller = createTutuToolCaller({
   url: new URL(config.TUTU_MCP_URL),
   timeoutMs: 10_000,
@@ -66,6 +74,8 @@ const runner = new RecomputeRunner(
   tutuAdapter,
   CITY_CATALOG,
   app.log,
+  60_000,
+  recomputeMetrics,
 );
 const worker = new RecomputeWorker(
   repository,

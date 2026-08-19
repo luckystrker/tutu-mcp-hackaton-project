@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 export type HealthDependencies = {
   readinessCheck: () => Promise<void>;
+  metricsSnapshot?: () => Readonly<Record<string, unknown>>;
 };
 
 export const healthRoutes: FastifyPluginAsync<HealthDependencies> = async (
@@ -10,6 +11,8 @@ export const healthRoutes: FastifyPluginAsync<HealthDependencies> = async (
   options,
 ) => {
   app.get("/health/live", async () => LivenessSchema.parse({ status: "ok" }));
+
+  app.get("/metrics", async () => options.metricsSnapshot?.() ?? {});
 
   app.get("/health/ready", async (_request, reply) => {
     try {

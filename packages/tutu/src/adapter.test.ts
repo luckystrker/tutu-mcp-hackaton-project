@@ -64,7 +64,11 @@ describe("Tutu adapter", () => {
       new AbortController().signal,
     );
     expect(result.status).toBe("partial");
+    expect(result.availability).toBe("available");
     expect(result.data).toEqual([route]);
+    expect(result.rawMetadataById?.[route.id]).toEqual(
+      expect.objectContaining({ providerOfferId: "fixture" }),
+    );
     expect(result.failures).toEqual([
       expect.objectContaining({
         code: "PROVIDER",
@@ -121,6 +125,7 @@ describe("Tutu adapter", () => {
     let current = 1_000;
     const fresh: AdapterResult<RouteOption> = {
       status: "fresh",
+      availability: "available",
       data: [route],
       fetchedAt: "2026-08-19T00:00:00.000Z",
       failures: [],
@@ -160,12 +165,14 @@ describe("Tutu adapter", () => {
     };
     const fresh: AdapterResult<RouteOption> = {
       status: "fresh",
+      availability: "available",
       data: [route, busRoute],
       fetchedAt: "2026-08-19T00:00:00.000Z",
       failures: [],
     };
     const degraded: AdapterResult<RouteOption> = {
       status: "partial",
+      availability: "available",
       data: [route],
       fetchedAt: "2026-08-19T00:15:00.000Z",
       failures: [
@@ -223,12 +230,17 @@ describe("Tutu adapter", () => {
     };
     const fresh: AdapterResult<RouteOption> = {
       status: "fresh",
+      availability: "available",
       data: [staleShared, staleOther],
       fetchedAt: "2026-08-19T00:00:00.000Z",
       failures: [],
+      rawMetadataById: {
+        [staleOther.id]: { providerField: "stale" },
+      },
     };
     const degraded: AdapterResult<RouteOption> = {
       status: "partial",
+      availability: "available",
       data: [freshShared],
       fetchedAt: "2026-08-19T00:15:00.000Z",
       failures: [
@@ -240,6 +252,9 @@ describe("Tutu adapter", () => {
           message: "partial mapping failure",
         },
       ],
+      rawMetadataById: {
+        [freshShared.id]: { providerField: "fresh" },
+      },
     };
     const base: TutuTransportAdapter = {
       searchOutbound: vi
@@ -261,5 +276,71 @@ describe("Tutu adapter", () => {
     current = 1200;
     const result = await cached.searchOutbound(input, signal);
     expect(result.data).toEqual([freshShared, staleOther]);
+    expect(result.rawMetadataById).toEqual({
+      [staleOther.id]: { providerField: "stale" },
+      [freshShared.id]: { providerField: "fresh" },
+    });
+  });
+
+  it("does not keep partial results fresh for the full TTL", async () => {
+    const partial: AdapterResult<RouteOption> = {
+      status: "partial",
+      availability: "available",
+      data: [route],
+      fetchedAt: "2026-08-19T00:00:00.000Z",
+      failures: [
+        {
+          code: "TIMEOUT",
+          tool: "search_bus",
+          mode: "bus",
+          retryable: true,
+          message: "timeout",
+        },
+      ],
+    };
+    const searchOutbound = vi.fn().mockResolvedValue(partial);
+    const cached = createCachedTutuAdapter({
+      adapter: {
+        searchOutbound,
+        searchReturn: vi.fn(),
+        searchHotels: vi.fn(),
+      },
+      cache: new MemoryTravelCache(),
+    });
+    const signal = new AbortController().signal;
+    await cached.searchOutbound(input, signal);
+    await cached.searchOutbound(input, signal);
+    expect(searchOutbound).toHaveBeenCalledTimes(2);
+  });
+
+  it("never masks validation errors with stale cache", async () => {
+    const fresh: AdapterResult<RouteOption> = {
+      status: "fresh",
+      availability: "available",
+      data: [route],
+      fetchedAt: "2026-08-19T00:00:00.000Z",
+      failures: [],
+    };
+    const searchOutbound = vi
+      .fn()
+      .mockResolvedValueOnce(fresh)
+      .mockRejectedValueOnce(new TypeError("invalid input"));
+    let current = 1_000;
+    const cached = createCachedTutuAdapter({
+      adapter: {
+        searchOutbound,
+        searchReturn: vi.fn(),
+        searchHotels: vi.fn(),
+      },
+      cache: new MemoryTravelCache(),
+      ttlMs: 10,
+      now: () => current,
+    });
+    const signal = new AbortController().signal;
+    await cached.searchOutbound(input, signal);
+    current = 1_100;
+    await expect(cached.searchOutbound(input, signal)).rejects.toThrow(
+      "invalid input",
+    );
   });
 });

@@ -5,8 +5,6 @@ export * from "./compare.js";
 export * from "./components.js";
 export * from "./counterfactual.js";
 export * from "./destination-pareto.js";
-export * from "./feasibility.js";
-export * from "./group-frontier.js";
 export * from "./model.js";
 export * from "./numeric.js";
 export * from "./presence.js";

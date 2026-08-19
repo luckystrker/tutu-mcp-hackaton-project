@@ -98,8 +98,13 @@ export function createCachedTutuAdapter(options: {
           });
           return {
             status: "partial",
+            availability: data.length > 0 ? "available" : "unknown",
             data,
             fetchedAt: entry.fetchedAt,
+            rawMetadataById: {
+              ...entry.value.rawMetadataById,
+              ...result.rawMetadataById,
+            },
             failures: result.failures.map((failure) => ({
               ...failure,
               usedStaleCache: true,
@@ -107,8 +112,7 @@ export function createCachedTutuAdapter(options: {
           };
         }
       }
-      const usable = result.data.length > 0 || result.failures.length === 0;
-      if (usable) {
+      if (result.status !== "partial") {
         const fetchedAt = result.fetchedAt;
         await options.cache.set(key, {
           value: result,
@@ -119,6 +123,7 @@ export function createCachedTutuAdapter(options: {
       }
       return result;
     } catch (error) {
+      if (isValidationError(error)) throw error;
       if (!entry || current >= entry.staleUntil || signal.aborted) throw error;
       const failure: ProviderFailure = {
         code: "PROVIDER",
@@ -182,10 +187,21 @@ function staleResult<T>(
   metrics.record({ tool, durationMs: 0, status: "error", cache: "stale" });
   return {
     status: "partial",
+    availability: entry.value.data.length > 0 ? "available" : "unknown",
     data: entry.value.data,
     fetchedAt: entry.fetchedAt,
+    ...(entry.value.rawMetadataById
+      ? { rawMetadataById: entry.value.rawMetadataById }
+      : {}),
     failures: failures.map((failure) => ({ ...failure, usedStaleCache: true })),
   };
+}
+
+function isValidationError(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error && error.name === "ZodError")
+  );
 }
 
 function canonicalize(value: unknown): unknown {

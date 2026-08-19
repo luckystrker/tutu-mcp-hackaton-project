@@ -125,11 +125,24 @@ export function createTutuTransportAdapter(options: {
           Date.parse(route.departureAt) >= earliest &&
           Date.parse(route.arrivalAt) <= latest,
       );
+    const data = deduplicate(routes);
+    const rawMetadataById = Object.fromEntries(
+      settled.flatMap((result) =>
+        result.options.map(({ value, rawMetadata }) => [value.id, rawMetadata]),
+      ),
+    );
     return {
       status: failures.length > 0 ? "partial" : "fresh",
-      data: deduplicate(routes),
+      availability:
+        data.length > 0
+          ? "available"
+          : failures.length > 0
+            ? "unknown"
+            : "none",
+      data,
       fetchedAt: now().toISOString(),
       failures,
+      rawMetadataById,
     };
   }
 
@@ -161,14 +174,27 @@ export function createTutuTransportAdapter(options: {
       });
       return {
         status: mapped.failures.length > 0 ? "partial" : "fresh",
+        availability:
+          mapped.options.length > 0
+            ? "available"
+            : mapped.failures.length > 0
+              ? "unknown"
+              : "none",
         data: mapped.options.map(({ value }) => value),
         fetchedAt,
         failures: mapped.failures,
+        rawMetadataById: Object.fromEntries(
+          mapped.options.map(({ value, rawMetadata }) => [
+            value.id,
+            rawMetadata,
+          ]),
+        ),
       };
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
       return {
         status: "partial",
+        availability: "unknown",
         data: [],
         fetchedAt,
         failures: [classifyProviderError(error, "search_hotels").toFailure()],

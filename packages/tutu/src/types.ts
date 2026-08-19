@@ -42,9 +42,11 @@ export type ProviderFailure = {
 
 export type AdapterResult<T> = {
   status: "fresh" | "cached" | "partial";
+  availability: "available" | "none" | "unknown";
   data: readonly T[];
   fetchedAt: string;
   failures: readonly ProviderFailure[];
+  rawMetadataById?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 };
 
 export interface TutuTransportAdapter {

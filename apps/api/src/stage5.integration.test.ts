@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   CreateTripResponseSchema,
+  InviteTokenResponseSchema,
   type HotelOption,
   type RouteOption,
   TripGroupDtoSchema,
@@ -86,11 +87,21 @@ describeDatabase("stage 5 data/API/workflow", () => {
     const created = CreateTripResponseSchema.parse(createdResponse.json());
     tripId = created.trip.id;
 
+    const rotated = await app.inject({
+      method: "POST",
+      url: `/api/trips/${tripId}/invite-token`,
+      headers: actorHeaders(organizerId, "Организатор"),
+    });
+    expect(rotated.statusCode).toBe(200);
+    const inviteToken = InviteTokenResponseSchema.parse(
+      rotated.json(),
+    ).inviteToken;
+
     const joined = await app.inject({
       method: "POST",
       url: `/api/trips/${tripId}/join`,
       headers: actorHeaders(memberId, "Участник"),
-      payload: { inviteToken: created.inviteToken },
+      payload: { inviteToken },
     });
     expect(joined.statusCode).toBe(200);
 
@@ -197,11 +208,15 @@ describeDatabase("stage 5 data/API/workflow", () => {
       { revision: 3, status: "STALE" },
       { revision: 4, status: "SUCCEEDED" },
     ]);
-    const latest = await database.query<{ revision: number }>(
-      `SELECT revision FROM rendezvous.trip_results WHERE trip_id=$1 ORDER BY revision DESC LIMIT 1`,
+    const latest = await database.query<{
+      revision: number;
+      candidate_algorithm_version: string;
+    }>(
+      `SELECT revision,candidate_algorithm_version FROM rendezvous.trip_results WHERE trip_id=$1 ORDER BY revision DESC LIMIT 1`,
       [tripId],
     );
     expect(latest.rows[0]?.revision).toBe(4);
+    expect(latest.rows[0]?.candidate_algorithm_version).toBe("geo-v1.1.0");
   });
 
   it("supports reaction removal, shortlist and final selection", async () => {
@@ -220,6 +235,24 @@ describeDatabase("stage 5 data/API/workflow", () => {
       payload: { cityId: destination.city.id, value: "love" },
     });
     expect(reaction.statusCode).toBe(204);
+    const reactedView = TripGroupDtoSchema.parse(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/trips/${tripId}`,
+          headers: actorHeaders(memberId, "Участник"),
+        })
+      ).json(),
+    );
+    expect(reactedView.destinations[0]?.reactions).toMatchObject({
+      love: 1,
+      mine: "love",
+    });
+    expect(
+      (await repository.listEventsAfter(memberId, tripId, 0)).some(
+        (event) => event.type === "reaction_added",
+      ),
+    ).toBe(true);
     const deletedReaction = await app.inject({
       method: "DELETE",
       url: `/api/trips/${tripId}/reactions/${destination.city.id}`,
@@ -249,6 +282,23 @@ describeDatabase("stage 5 data/API/workflow", () => {
     expect(TripOrganizerDtoSchema.parse(finalizedView.json()).trip.status).toBe(
       "FINALIZED",
     );
+    for (const [url, method, payload] of [
+      [`/api/trips/${tripId}/cancel`, "POST", undefined],
+      [
+        `/api/trips/${tripId}/shortlist`,
+        "PUT",
+        { cityIds: [destination.city.id] },
+      ],
+      [`/api/trips/${tripId}/settings`, "PUT", { title: "Поздно" }],
+    ] as const) {
+      const closedMutation = await app.inject({
+        method,
+        url,
+        headers: actorHeaders(organizerId, "Организатор"),
+        ...(payload ? { payload } : {}),
+      });
+      expect(closedMutation.statusCode).toBe(409);
+    }
   });
 });
 
@@ -348,7 +398,13 @@ function route(
 }
 
 function result<T>(data: readonly T[]): AdapterResult<T> {
-  return { status: "fresh", data, fetchedAt, failures: [] };
+  return {
+    status: "fresh",
+    availability: data.length > 0 ? "available" : "none",
+    data,
+    fetchedAt,
+    failures: [],
+  };
 }
 
 function shiftHours(value: string, hours: number): string {

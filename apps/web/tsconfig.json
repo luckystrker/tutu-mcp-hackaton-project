@@ -7,8 +7,12 @@
     "outDir": ".types",
     "rootDir": "src",
     "jsx": "react-jsx",
-    "types": ["vite/client"]
+    "types": ["vite/client", "node"]
   },
-  "references": [{ "path": "../../packages/contracts" }],
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/domain" },
+    { "path": "../../packages/solver" }
+  ],
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

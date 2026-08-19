@@ -10,6 +10,7 @@ export type AppDependencies = {
   readinessCheck: () => Promise<void>;
   tripService?: TripService;
   logger?: FastifyServerOptions["logger"];
+  metricsSnapshot?: () => Readonly<Record<string, unknown>>;
 };
 
 const CODE_BY_STATUS: Record<number, string> = {
@@ -78,6 +79,9 @@ export function buildApp(dependencies: AppDependencies) {
 
   void app.register(healthRoutes, {
     readinessCheck: dependencies.readinessCheck,
+    ...(dependencies.metricsSnapshot
+      ? { metricsSnapshot: dependencies.metricsSnapshot }
+      : {}),
   });
   if (dependencies.tripService)
     void app.register(tripRoutes, { service: dependencies.tripService });

@@ -57,6 +57,10 @@ export class TripService {
     );
   }
 
+  async rotateInviteToken(actor: Actor, tripId: string): Promise<string> {
+    return this.repository.rotateInviteToken(actor.userId, tripId);
+  }
+
   async updatePreferences(
     actor: Actor,
     tripId: string,
@@ -143,6 +147,10 @@ export class TripService {
 
   async finalize(actor: Actor, tripId: string, destinationResultId: string) {
     return this.repository.finalize(actor.userId, tripId, destinationResultId);
+  }
+
+  async listEventsAfter(actor: Actor, tripId: string, afterId: number) {
+    return this.repository.listEventsAfter(actor.userId, tripId, afterId);
   }
 
   private requireKnownCities(cityIds: readonly string[]): void {

@@ -7,7 +7,12 @@ import {
 } from "./components.js";
 import type { ParticipantBurden, RouteBundle } from "./model.js";
 import { SolverError } from "./numeric.js";
-import { presetToWeights, sliderToWeights } from "./presets.js";
+import {
+  advancedSliderToWeights,
+  advancedSlidersToWeights,
+  presetToWeights,
+  sliderToWeights,
+} from "./presets.js";
 
 const bundles = [bundle("p1"), bundle("p2")];
 
@@ -99,6 +104,15 @@ describe("absolute scoring anchors", () => {
     ).toThrow(SolverError);
     expect(() => sliderToWeights(-0.5)).toThrow(SolverError);
     expect(() => sliderToWeights(4)).toThrow(SolverError);
+    expect(advancedSliderToWeights("economy-comfort", 0)).toEqual(
+      presetToWeights("cheapest"),
+    );
+    expect(advancedSliderToWeights("efficiency-fairness", 1)).toEqual(
+      presetToWeights("fairest"),
+    );
+    expect(advancedSlidersToWeights(0.5, 0.5)).toEqual(
+      presetToWeights("balanced"),
+    );
   });
 
   it("always produces a score in the component range", () => {

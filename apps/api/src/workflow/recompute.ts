@@ -20,13 +20,18 @@ import type {
 
 export type RecomputeRepository = Pick<
   TripRepository,
-  "emitProgress" | "currentRevision" | "getPrivateTrip" | "persistIfCurrent"
+  | "emitProgress"
+  | "currentRevision"
+  | "getPrivateTrip"
+  | "persistIfCurrent"
+  | "markJobStale"
 >;
 
 const JobSchema = z.strictObject({
   id: z.uuid(),
   tripId: z.uuid(),
   revision: z.number().int().nonnegative(),
+  queuedAt: z.iso.datetime(),
 });
 const WorkflowResultSchema = z.strictObject({
   status: z.enum(["PERSISTED", "STALE"]),
@@ -39,6 +44,26 @@ export interface WorkflowLog {
   error(fields: Readonly<Record<string, unknown>>, message: string): void;
 }
 
+export interface RecomputeMetrics {
+  recordRecomputeLatencyReadyToPublished(milliseconds: number): void;
+}
+
+export class InMemoryRecomputeMetrics implements RecomputeMetrics {
+  readonly recomputeLatencyReadyToPublished: number[] = [];
+
+  recordRecomputeLatencyReadyToPublished(milliseconds: number): void {
+    this.recomputeLatencyReadyToPublished.push(milliseconds);
+  }
+
+  p95ReadyToPublished(): number | null {
+    if (this.recomputeLatencyReadyToPublished.length === 0) return null;
+    const ordered = [...this.recomputeLatencyReadyToPublished].sort(
+      (a, b) => a - b,
+    );
+    return ordered[Math.ceil(ordered.length * 0.95) - 1]!;
+  }
+}
+
 export class RecomputeRunner {
   readonly #cityById: ReadonlyMap<string, City>;
 
@@ -49,6 +74,9 @@ export class RecomputeRunner {
     cities: readonly City[],
     private readonly log: WorkflowLog,
     private readonly deadlineMs = 60_000,
+    private readonly metrics: RecomputeMetrics = {
+      recordRecomputeLatencyReadyToPublished: () => undefined,
+    },
   ) {
     this.#cityById = new Map(cities.map((city) => [city.id, city]));
   }
@@ -65,8 +93,10 @@ export class RecomputeRunner {
     };
     this.log.info(logFields, "recompute started");
     await this.repository.emitProgress(job.tripId, job.revision, "load", 5);
-    if ((await this.repository.currentRevision(job.tripId)) !== job.revision)
+    if ((await this.repository.currentRevision(job.tripId)) !== job.revision) {
+      await this.repository.markJobStale(job);
       return { status: "STALE", destinations: 0 };
+    }
     const snapshot = await this.repository.getPrivateTrip(job.tripId);
     const validated = validateTripForComputation(
       snapshot.trip,
@@ -142,8 +172,10 @@ export class RecomputeRunner {
       });
     }
 
-    if ((await this.repository.currentRevision(job.tripId)) !== job.revision)
+    if ((await this.repository.currentRevision(job.tripId)) !== job.revision) {
+      await this.repository.markJobStale(job);
       return { status: "STALE", destinations: 0 };
+    }
     await this.repository.emitProgress(job.tripId, job.revision, "hotels", 70);
     const enrichedCities = new Set(
       preliminary.ranked.slice(0, 6).map(({ cityId }) => cityId),
@@ -196,6 +228,7 @@ export class RecomputeRunner {
       output,
       destinations,
       degraded,
+      this.candidateGenerator.algorithmVersion,
     );
     const status = persisted === "persisted" ? "PERSISTED" : "STALE";
     this.log.info(
@@ -209,6 +242,10 @@ export class RecomputeRunner {
       },
       "recompute finished",
     );
+    if (status === "PERSISTED")
+      this.metrics.recordRecomputeLatencyReadyToPublished(
+        Date.now() - Date.parse(job.queuedAt),
+      );
     return { status, destinations: destinations.length };
   }
 
@@ -220,58 +257,64 @@ export class RecomputeRunner {
     signal: AbortSignal,
     reportPartial: (partial: boolean) => void,
   ): Promise<void> {
-    for (const cityId of cityIds) {
-      if (participants.some(({ originCityId }) => originCityId === cityId))
-        continue;
-      const city = this.#cityById.get(cityId);
-      if (!city) continue;
-      const results = await Promise.all(
-        participants.map(async (participant) => {
-          const origin = this.#cityById.get(participant.originCityId)!;
-          const common = {
-            earliestDepartureAt: participant.availableFrom,
-            latestArrivalAt: participant.mustReturnBy,
-            allowedModes: ALL_MODES,
-            passengers: 1 as const,
-          };
-          const outboundInput: SearchLegInput = {
-            ...common,
-            origin: cityRef(origin),
-            destination: cityRef(city),
-          };
-          const returnInput: SearchLegInput = {
-            ...common,
-            origin: cityRef(city),
-            destination: cityRef(origin),
-          };
-          const [outbound, returning] = await Promise.all([
-            safeAdapterCall("searchOutbound", signal, () =>
-              this.adapter.searchOutbound(outboundInput, signal),
-            ),
-            safeAdapterCall("searchReturn", signal, () =>
-              this.adapter.searchReturn(returnInput, signal),
-            ),
-          ]);
-          reportPartial(
-            outbound.status === "partial" || returning.status === "partial",
+    const searchable = cityIds.filter(
+      (cityId) =>
+        !participants.some(({ originCityId }) => originCityId === cityId) &&
+        this.#cityById.has(cityId),
+    );
+    for (let offset = 0; offset < searchable.length; offset += 4) {
+      await Promise.all(
+        searchable.slice(offset, offset + 4).map(async (cityId) => {
+          const city = this.#cityById.get(cityId)!;
+          const results = await Promise.all(
+            participants.map(async (participant) => {
+              const origin = this.#cityById.get(participant.originCityId)!;
+              const common = {
+                earliestDepartureAt: participant.availableFrom,
+                latestArrivalAt: participant.mustReturnBy,
+                allowedModes: ALL_MODES,
+                passengers: 1 as const,
+              };
+              const outboundInput: SearchLegInput = {
+                ...common,
+                origin: cityRef(origin),
+                destination: cityRef(city),
+              };
+              const returnInput: SearchLegInput = {
+                ...common,
+                origin: cityRef(city),
+                destination: cityRef(origin),
+              };
+              const [outbound, returning] = await Promise.all([
+                safeAdapterCall("searchOutbound", signal, () =>
+                  this.adapter.searchOutbound(outboundInput, signal),
+                ),
+                safeAdapterCall("searchReturn", signal, () =>
+                  this.adapter.searchReturn(returnInput, signal),
+                ),
+              ]);
+              reportPartial(
+                outbound.status === "partial" || returning.status === "partial",
+              );
+              return {
+                participantId: participant.id,
+                originTimeZone: origin.tz,
+                outbound: outbound.data,
+                returns: returning.data,
+                fetchedAt: earliestFetchedAt(outbound, returning),
+              };
+            }),
           );
-          return {
-            participantId: participant.id,
-            originTimeZone: origin.tz,
-            outbound: outbound.data,
-            returns: returning.data,
-            fetchedAt: earliestFetchedAt(outbound, returning),
-          };
+          factsByCity.set(cityId, {
+            cityId,
+            destinationTimeZone: city.tz,
+            participants: results.map(({ fetchedAt: _, ...facts }) => facts),
+            fetchedAt:
+              results.map(({ fetchedAt }) => fetchedAt).sort()[0] ??
+              new Date().toISOString(),
+          });
         }),
       );
-      factsByCity.set(cityId, {
-        cityId,
-        destinationTimeZone: city.tz,
-        participants: results.map(({ fetchedAt: _, ...facts }) => facts),
-        fetchedAt:
-          results.map(({ fetchedAt }) => fetchedAt).sort()[0] ??
-          new Date().toISOString(),
-      });
     }
   }
 }
@@ -325,6 +368,7 @@ async function safeAdapterCall<T>(
     if (signal.aborted) throw error;
     return {
       status: "partial",
+      availability: "unknown",
       data: [],
       fetchedAt: new Date().toISOString(),
       failures: [
