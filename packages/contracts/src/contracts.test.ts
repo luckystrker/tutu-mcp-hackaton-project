@@ -178,6 +178,7 @@ describe("shared contracts", () => {
     const groupParticipant = {
       id: ids.participant,
       displayName: "Данил",
+      originCityId: ids.city,
       ready: true,
       suitability: "suitable" as const,
     };

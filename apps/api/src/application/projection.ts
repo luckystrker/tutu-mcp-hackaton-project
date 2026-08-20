@@ -33,6 +33,7 @@ export function projectAggregate(
     (participant) => ({
       id: participant.id,
       displayName: participant.displayName,
+      originCityId: participant.ready ? participant.originCityId : null,
       ready: participant.ready,
       suitability: !participant.ready
         ? "unknown"

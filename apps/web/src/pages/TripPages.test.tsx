@@ -19,6 +19,7 @@ import {
   DestinationPage,
   InvitePage,
   LiveRoomPage,
+  PreferencesPage,
   ShortlistPage,
   StartPage,
   TripsPage,
@@ -52,6 +53,24 @@ describe("core trip pages", () => {
       screen.getByLabelText("Можно искать встречу за границей"),
     ).toBeTruthy();
     expect(screen.getByLabelText("Поезд")).toBeTruthy();
+  });
+
+  it("offers geolocation, a map and the full city catalog for the origin", async () => {
+    const id = DEMO_TRIP_IDS.live;
+    renderPage(
+      `/trips/${id}/me`,
+      <Route path="/trips/:tripId/me" element={<PreferencesPage />} />,
+    );
+    expect(await screen.findByText("Откуда ты едешь")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Моё место/ })).toBeTruthy();
+    expect(
+      screen.getByRole("application", { name: /Карта городов/ }),
+    ).toBeTruthy();
+    expect(
+      within(
+        screen.getByRole("combobox", { name: "Город списком" }),
+      ).getAllByRole("option").length,
+    ).toBeGreaterThanOrEqual(100);
   });
 
   it("changes fixture ranking from a preset without a global loading screen", async () => {

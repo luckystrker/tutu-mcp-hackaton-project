@@ -15,8 +15,10 @@ import {
 } from "@rendezvous/solver/presets";
 import {
   useEffect,
+  lazy,
   useRef,
   useState,
+  Suspense,
   type CSSProperties,
   type FormEvent,
   type Ref,
@@ -61,10 +63,11 @@ const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
   suburban: "Электричка",
 };
 
-const ORIGIN_CITIES = [...CITY_CATALOG]
-  .sort((a, b) => b.hubScore - a.hubScore)
-  .slice(0, 12);
 const MOSCOW_ID = CITY_CATALOG.find((city) => city.name === "Москва")!.id;
+const OriginMapPicker = lazy(async () => {
+  const module = await import("../components/OriginMapPicker.js");
+  return { default: module.OriginMapPicker };
+});
 
 export function StartPage() {
   const { data: trips, isLoading } = useTrips();
@@ -477,6 +480,10 @@ export function PreferencesPage() {
   const mutation = usePreferencesMutation(id);
   const navigate = useNavigate();
   const [error, setError] = useState("");
+  const [originCityId, setOriginCityId] = useState(MOSCOW_ID);
+  useEffect(() => {
+    if (view?.me.originCityId) setOriginCityId(view.me.originCityId);
+  }, [view?.me.originCityId]);
   if (isLoading) return <Loading />;
   if (loadError || !view) return <LoadFailed />;
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -532,26 +539,30 @@ export function PreferencesPage() {
           <div>
             <strong>Это видишь только ты</strong>
             <p>
-              Группа увидит готовность и общий статус «подходит / конфликт».
+              Группа увидит твой город, готовность и общий статус «подходит /
+              конфликт».
             </p>
           </div>
         </div>
         <form onSubmit={submit} className="constraint-form">
           <fieldset>
             <legend>Обязательные условия</legend>
-            <label>
-              Город отправления
-              <select
-                name="origin"
-                defaultValue={view.me.originCityId ?? MOSCOW_ID}
-              >
-                {ORIGIN_CITIES.map((city) => (
-                  <option key={city.id} value={city.id}>
-                    {city.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Suspense
+              fallback={
+                <div className="origin-map-loading" role="status">
+                  Готовим карту городов…
+                </div>
+              }
+            >
+              <OriginMapPicker
+                cities={CITY_CATALOG}
+                participants={view.participants.filter(
+                  (participant) => participant.id !== view.me.id,
+                )}
+                selectedCityId={originCityId}
+                onSelect={setOriginCityId}
+              />
+            </Suspense>
             <div className="form-grid">
               <label>
                 Могу выехать

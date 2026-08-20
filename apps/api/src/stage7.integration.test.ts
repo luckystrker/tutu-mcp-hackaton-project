@@ -131,6 +131,7 @@ describeDatabase("stage 7 Telegram session and collaboration", () => {
     expect(Object.keys(parsed.participants[0]!).sort()).toEqual([
       "displayName",
       "id",
+      "originCityId",
       "ready",
       "suitability",
     ]);

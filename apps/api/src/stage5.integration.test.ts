@@ -150,6 +150,7 @@ describeDatabase("stage 5 data/API/workflow", () => {
     expect(Object.keys(view.participants[0]!).sort()).toEqual([
       "displayName",
       "id",
+      "originCityId",
       "ready",
       "suitability",
     ]);

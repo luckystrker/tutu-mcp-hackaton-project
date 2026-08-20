@@ -46,6 +46,7 @@ export const ParticipantSelfDtoSchema = ParticipantPrivateSchema.omit({
 export const ParticipantGroupDtoSchema = z.strictObject({
   id: EntityIdSchema,
   displayName: NonEmptyTextSchema,
+  originCityId: EntityIdSchema.nullable(),
   ready: z.boolean(),
   suitability: z.enum(["unknown", "suitable", "conflict"]),
 });

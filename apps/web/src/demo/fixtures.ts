@@ -24,11 +24,7 @@ const participantIds = [
   "41000000-0000-4000-8000-000000000003",
   "41000000-0000-4000-8000-000000000004",
 ] as const;
-const originCityIds = [
-  "42000000-0000-4000-8000-000000000001",
-  "42000000-0000-4000-8000-000000000002",
-  "42000000-0000-4000-8000-000000000003",
-] as const;
+const originCityIds = DEMO_PARTICIPANTS.map(({ originCityId }) => originCityId);
 const cityIds = [
   "42100000-0000-4000-8000-000000000001",
   "42100000-0000-4000-8000-000000000002",
@@ -129,6 +125,8 @@ function makeView(
     participants: DEMO_PARTICIPANTS.map(({ displayName }, index) => ({
       id: participantIds[index],
       displayName,
+      originCityId:
+        index < (options.ready ?? 3) ? (originCityIds[index] ?? null) : null,
       ready: index < (options.ready ?? 3),
       suitability: index < (options.ready ?? 3) ? "suitable" : "unknown",
     })),
@@ -375,6 +373,7 @@ export class FixtureRendezvousApi implements RendezvousApi {
       const view = structuredClone(current);
       view.participants[2] = {
         ...view.participants[2]!,
+        originCityId: originCityIds[2]!,
         ready: true,
         suitability: "suitable",
       };
