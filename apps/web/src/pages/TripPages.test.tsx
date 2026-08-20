@@ -139,6 +139,9 @@ describe("core trip pages", () => {
     expect(
       (await screen.findAllByText("Сентябрьский побег")).length,
     ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("link", { name: "Назад" }).getAttribute("href"),
+    ).toBe("/");
   });
 
   it("copies a working invite URL", async () => {
@@ -203,6 +206,21 @@ describe("core trip pages", () => {
     );
     expect(await screen.findByText("Дорога на человека")).toBeTruthy();
     expect(screen.getAllByText(/₽.*–.*₽/).length).toBeGreaterThan(0);
+  });
+
+  it("shows a useful comparison state before two cities are calculated", async () => {
+    const id = DEMO_TRIP_IDS.empty;
+    renderPage(
+      `/trips/${id}/compare`,
+      <Route path="/trips/:tripId/compare" element={<ComparePage />} />,
+    );
+    expect(await screen.findByText("Сравнивать пока нечего")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "К обзору поездки" })
+        .getAttribute("href"),
+    ).toBe(`/trips/${id}/live`);
+    expect(screen.queryByText("Почему так")).toBeNull();
   });
 
   it("shows a facts-first explanation on a destination", async () => {

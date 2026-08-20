@@ -13,7 +13,14 @@ import {
   presetToWeights,
   type ScoringPreset,
 } from "@rendezvous/solver/presets";
-import { useEffect, useRef, useState, type FormEvent, type Ref } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type Ref,
+} from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useApi } from "../app/providers.js";
 import { AppFrame } from "../components/AppFrame.js";
@@ -141,7 +148,7 @@ export function CreateTripPage() {
     }
   }
   return (
-    <AppFrame title="Новая поездка" back>
+    <AppFrame title="Новая поездка" back backTo="/">
       <main className="start-page">
         <p className="eyebrow">Встретиться посередине</p>
         <h1>
@@ -249,7 +256,7 @@ export function CreateTripPage() {
 export function TripsPage() {
   const { data: trips, isLoading, error } = useTrips();
   return (
-    <AppFrame title="Мои поездки" back>
+    <AppFrame title="Мои поездки" back backTo="/">
       <main className="trips-page">
         <div className="page-heading">
           <div>
@@ -1072,33 +1079,63 @@ export function ComparePage() {
       <main className="compare-page">
         <p className="eyebrow">На одном экране</p>
         <h1>Чем отличаются</h1>
-        <div className="compare-table">
-          <div className="compare-row compare-row--head">
-            <span>Город</span>
-            {view.destinations.map((d) => (
-              <strong key={d.city.id}>{d.city.name}</strong>
-            ))}
-          </div>
-          {(["score", "commonTimeMinutes"] as const).map((key) => (
-            <div className="compare-row" key={key}>
-              <span>{key === "score" ? "Совпадение" : "Время вместе"}</span>
-              {view.destinations.map((d) => (
-                <b key={d.city.id}>
-                  {key === "score"
-                    ? d.score
-                    : formatDuration(d.commonTimeMinutes)}
-                </b>
+        {view.destinations.length < 2 ? (
+          <section className="empty-state compare-empty">
+            <span aria-hidden="true">⇄</span>
+            <h2>Сравнивать пока нечего</h2>
+            <p>
+              Здесь появятся отличия, когда будут рассчитаны хотя бы два города.
+            </p>
+            <Link className="primary-button as-link" to={`/trips/${id}/live`}>
+              К обзору поездки
+            </Link>
+          </section>
+        ) : (
+          <>
+            <div
+              className="compare-table"
+              role="table"
+              aria-label="Сравнение городов"
+              style={
+                {
+                  "--compare-columns": view.destinations.length,
+                } as CSSProperties
+              }
+            >
+              <div className="compare-row compare-row--head" role="row">
+                <span role="columnheader">Город</span>
+                {view.destinations.map((d) => (
+                  <strong role="columnheader" key={d.city.id}>
+                    {d.city.name}
+                  </strong>
+                ))}
+              </div>
+              {(["score", "commonTimeMinutes"] as const).map((key) => (
+                <div className="compare-row" role="row" key={key}>
+                  <span role="rowheader">
+                    {key === "score" ? "Совпадение" : "Время вместе"}
+                  </span>
+                  {view.destinations.map((d) => (
+                    <b role="cell" key={d.city.id}>
+                      {key === "score"
+                        ? d.score
+                        : formatDuration(d.commonTimeMinutes)}
+                    </b>
+                  ))}
+                </div>
               ))}
+              <div className="compare-row" role="row">
+                <span role="rowheader">Дорога на человека</span>
+                {view.destinations.map((d) => (
+                  <b role="cell" key={d.city.id}>
+                    {formatRouteCostRange(d.routes)}
+                  </b>
+                ))}
+              </div>
             </div>
-          ))}
-          <div className="compare-row">
-            <span>Дорога на человека</span>
-            {view.destinations.map((d) => (
-              <b key={d.city.id}>{formatRouteCostRange(d.routes)}</b>
-            ))}
-          </div>
-        </div>
-        <ExplanationPanel query={explanation} />
+            <ExplanationPanel query={explanation} />
+          </>
+        )}
       </main>
     </AppFrame>
   );

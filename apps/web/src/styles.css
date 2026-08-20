@@ -82,6 +82,9 @@ a {
   grid-template-rows: auto minmax(0, 1fr) auto;
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
 }
+.app-frame--with-nav > * {
+  min-width: 0;
+}
 .topbar {
   position: sticky;
   z-index: 4;
@@ -302,6 +305,11 @@ h2 {
 }
 .number-choices input {
   position: absolute;
+  width: 1px;
+  min-height: 0;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   opacity: 0;
   pointer-events: none;
 }
@@ -1161,21 +1169,25 @@ select {
   color: var(--muted);
 }
 .compare-table {
+  min-width: 0;
   background: var(--card);
   border-radius: 20px;
-  overflow: auto;
-  overscroll-behavior-inline: contain;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 .compare-row {
   display: grid;
-  grid-template-columns: 132px repeat(3, minmax(120px, 1fr));
-  min-width: 492px;
+  grid-template-columns:
+    minmax(104px, 0.9fr)
+    repeat(var(--compare-columns), minmax(0, 1fr));
+  min-width: 0;
   border-bottom: 1px solid var(--line);
 }
 .compare-row > * {
+  min-width: 0;
   padding: 14px 10px;
   font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .compare-row > span {
   color: var(--muted);
@@ -1183,6 +1195,12 @@ select {
 .compare-row--head {
   background: var(--forest);
   color: white;
+}
+.compare-row:last-child {
+  border-bottom: 0;
+}
+.compare-empty h2 {
+  font-size: 24px;
 }
 .shortlist-item {
   width: 100%;

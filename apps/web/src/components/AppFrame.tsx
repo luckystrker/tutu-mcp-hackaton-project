@@ -5,12 +5,14 @@ export function AppFrame({
   children,
   title,
   back = false,
+  backTo,
   tripId,
   hideTripNav = false,
 }: {
   children: ReactNode;
   title?: string;
   back?: boolean;
+  backTo?: string;
   tripId?: string;
   hideTripNav?: boolean;
 }) {
@@ -22,13 +24,19 @@ export function AppFrame({
       <header className="topbar">
         <div className="topbar__side topbar__side--left">
           {back ? (
-            <button
-              className="icon-button"
-              onClick={() => navigate(-1)}
-              aria-label="Назад"
-            >
-              ←
-            </button>
+            backTo ? (
+              <Link className="icon-button" to={backTo} aria-label="Назад">
+                ←
+              </Link>
+            ) : (
+              <button
+                className="icon-button"
+                onClick={() => navigate(-1)}
+                aria-label="Назад"
+              >
+                ←
+              </button>
+            )
           ) : tripId ? (
             <Link className="icon-button" to="/trips" aria-label="К поездкам">
               ←
