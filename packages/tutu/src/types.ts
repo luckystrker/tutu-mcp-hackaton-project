@@ -43,6 +43,7 @@ export type ProviderFailure = {
 
 export type AdapterResult<T> = {
   status: "fresh" | "cached" | "partial";
+  /** `none` means the provider explicitly confirmed zero inventory for the requested dates. */
   availability: "available" | "none" | "unknown";
   data: readonly T[];
   fetchedAt: string;

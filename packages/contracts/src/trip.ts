@@ -4,6 +4,7 @@ import {
   IsoDateTimeSchema,
   NonEmptyTextSchema,
 } from "./common.js";
+import { TransportModeSchema } from "./participant.js";
 
 export const TripStatusSchema = z.enum([
   "CREATED",
@@ -42,9 +43,10 @@ export const TripSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
   rankingVersion: z.number().int().nonnegative(),
   minTogetherMinutes: z.number().int().positive(),
-  periodFrom: IsoDateTimeSchema,
-  periodTo: IsoDateTimeSchema,
+  periodFrom: IsoDateTimeSchema.nullable(),
+  periodTo: IsoDateTimeSchema.nullable(),
   allowInternational: z.boolean(),
+  preferredTransportModes: z.array(TransportModeSchema).default([]),
   scoringConfig: ScoringConfigSchema,
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,

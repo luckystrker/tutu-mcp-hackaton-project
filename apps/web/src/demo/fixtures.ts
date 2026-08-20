@@ -115,6 +115,7 @@ function makeView(
       periodFrom: "2026-09-04T12:00:00.000Z",
       periodTo: "2026-09-06T21:00:00.000Z",
       allowInternational: false,
+      preferredTransportModes: ["train"],
       scoringConfig: {
         together: 35,
         cost: 25,
@@ -168,7 +169,12 @@ export const FIXTURE_TRIPS: Readonly<Record<string, TripOrganizerDto>> = {
   [DEMO_TRIP_IDS.live]: makeView(DEMO_TRIP_IDS.live),
   [DEMO_TRIP_IDS.running]: makeView(DEMO_TRIP_IDS.running, {
     computeStatus: "running",
-    ready: 3,
+    ready: 2,
+    destinations: [
+      { ...destinations[0]!, score: 86, rank: 1 },
+      { ...destinations[1]!, score: 82, rank: 2 },
+      { ...destinations[2]!, score: 78, rank: 3 },
+    ],
   }),
   [DEMO_TRIP_IDS.degraded]: makeView(DEMO_TRIP_IDS.degraded, {
     computeStatus: "degraded",
@@ -345,6 +351,44 @@ export class FixtureRendezvousApi implements RendezvousApi {
     }
     this.#views.set(id, view);
     return TripOrganizerDtoSchema.parse(view);
+  }
+
+  async deleteReaction(id: string, cityId: string): Promise<TripView> {
+    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    const destination = view.destinations.find(
+      ({ city }) => city.id === cityId,
+    );
+    const current = destination?.reactions;
+    if (current?.mine) {
+      current[current.mine] = Math.max(0, current[current.mine] - 1);
+      current.mine = null;
+    }
+    this.#views.set(id, view);
+    return TripOrganizerDtoSchema.parse(view);
+  }
+
+  subscribeToTrip(id: string, onEvent: () => void): () => void {
+    if (id !== DEMO_TRIP_IDS.running) return () => undefined;
+    const timer = window.setTimeout(() => {
+      const current = this.#views.get(id);
+      if (!current || current.participants[2]?.ready) return;
+      const view = structuredClone(current);
+      view.participants[2] = {
+        ...view.participants[2]!,
+        ready: true,
+        suitability: "suitable",
+      };
+      view.trip.computeStatus = "idle";
+      view.trip.rankingVersion += 1;
+      view.destinations = [
+        { ...view.destinations[2]!, score: 94, rank: 1 },
+        { ...view.destinations[1]!, score: 89, rank: 2 },
+        { ...view.destinations[0]!, score: 74, rank: 3 },
+      ];
+      this.#views.set(id, TripOrganizerDtoSchema.parse(view));
+      onEvent();
+    }, 900);
+    return () => window.clearTimeout(timer);
   }
 
   async setShortlist(

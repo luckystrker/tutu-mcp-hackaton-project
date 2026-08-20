@@ -34,6 +34,7 @@ export const DEMO_TRIP: Trip = {
   periodFrom: "2026-09-04T15:00:00+03:00",
   periodTo: "2026-09-06T23:30:00+03:00",
   allowInternational: false,
+  preferredTransportModes: ["train"],
   scoringConfig: {
     together: 35,
     cost: 25,

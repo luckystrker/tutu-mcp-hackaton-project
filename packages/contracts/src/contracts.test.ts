@@ -48,6 +48,7 @@ const trip = {
   periodFrom: now,
   periodTo: "2026-09-06T23:00:00+07:00",
   allowInternational: false,
+  preferredTransportModes: [],
   scoringConfig: {
     together: 35,
     cost: 25,

@@ -16,7 +16,11 @@ export function validateTripForComputation(
       message: `Trip in ${trip.status} state cannot be recomputed`,
     });
   }
-  if (Date.parse(trip.periodFrom) >= Date.parse(trip.periodTo)) {
+  if (
+    trip.periodFrom !== null &&
+    trip.periodTo !== null &&
+    Date.parse(trip.periodFrom) >= Date.parse(trip.periodTo)
+  ) {
     errors.push({
       code: "INVALID_TRIP_PERIOD",
       path: "periodTo",

@@ -106,6 +106,14 @@ describeDatabase("stage 5 data/API/workflow", () => {
     });
     expect(joined.statusCode).toBe(200);
 
+    const joinedByTripRoute = await app.inject({
+      method: "POST",
+      url: `/api/trips/${tripId}/join`,
+      headers: actorHeaders(memberId, "Участник"),
+      payload: { inviteToken },
+    });
+    expect(joinedByTripRoute.statusCode, joinedByTripRoute.body).toBe(200);
+
     const origins = CITY_CATALOG.slice(0, 2);
     for (const [index, userId] of [organizerId, memberId].entries()) {
       const response = await app.inject({
@@ -145,6 +153,11 @@ describeDatabase("stage 5 data/API/workflow", () => {
       "ready",
       "suitability",
     ]);
+    expect(
+      view.participants
+        .filter(({ ready }) => ready)
+        .map(({ suitability }) => suitability),
+    ).toEqual(["suitable", "suitable"]);
 
     const explained = await app.inject({
       method: "POST",

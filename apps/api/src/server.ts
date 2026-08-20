@@ -1,4 +1,7 @@
 import { resolve } from "node:path";
+import { Mastra } from "@mastra/core/mastra";
+import { MastraCompositeStore } from "@mastra/core/storage";
+import { WorkflowsPG } from "@mastra/pg";
 import {
   CITY_CATALOG,
   CITY_CATALOG_VERSION,
@@ -11,6 +14,7 @@ import {
   InMemoryTutuMetrics,
 } from "@rendezvous/tutu";
 import { config as loadDotenv } from "dotenv";
+import { Pool } from "pg";
 import { TripService } from "./application/trip-service.js";
 import { ExplanationService } from "./application/explanation-service.js";
 import { SessionService } from "./auth/session-service.js";
@@ -132,9 +136,30 @@ const runner = new RecomputeRunner(
   60_000,
   recomputeMetrics,
 );
+const workflowPool = new Pool({
+  connectionString: config.DATABASE_URL,
+  max: 3,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 3_000,
+});
+const workflowStorage = new MastraCompositeStore({
+  id: "rendezvous-workflow-storage",
+  domains: {
+    workflows: new WorkflowsPG({
+      pool: workflowPool,
+      schemaName: "mastra_workflow",
+    }),
+  },
+});
+const recomputeWorkflow = createMastraRecomputeWorkflow(runner);
+const mastra = new Mastra({
+  storage: workflowStorage,
+  workflows: { recompute: recomputeWorkflow },
+});
+await workflowStorage.init();
 const worker = new RecomputeWorker(
   repository,
-  createMastraRecomputeWorkflow(runner),
+  mastra.getWorkflow("recompute"),
   (error) => {
     app.log.error({ err: error }, "recompute worker failed");
   },
@@ -147,6 +172,7 @@ const shutdown = createShutdown({
   closeServer: async () => {
     clearInterval(outboxRetentionTimer);
     await worker.close();
+    await workflowPool.end();
     await tutuCaller.close();
     await app.close();
   },

@@ -2,6 +2,13 @@ import type { RouteOption, SoftPreferences } from "@rendezvous/contracts";
 import type { SoftPenaltyBreakdown } from "./model.js";
 import { clamp, mean } from "./numeric.js";
 
+export const SOFT_PENALTY_WEIGHTS = {
+  nightTravel: 1,
+  transfers: 1,
+  arrivalWindow: 1,
+  maxTravelHours: 1,
+} as const;
+
 export function calculatePenaltyBreakdown(
   outbound: RouteOption,
   returning: RouteOption,
@@ -35,21 +42,40 @@ export function aggregateSoftPenalty(
   preferences: SoftPreferences,
   totalTravelMinutes?: number,
 ): number {
-  const active: number[] = [];
-  if (preferences.avoidNightTravel) active.push(penalties.nightTravel);
-  if (preferences.preferDirect) active.push(penalties.transfers);
-  if (preferences.preferMorningArrival) active.push(penalties.arrivalWindow);
+  const active: Array<{ value: number; weight: number }> = [];
+  if (preferences.avoidNightTravel)
+    active.push({
+      value: penalties.nightTravel,
+      weight: SOFT_PENALTY_WEIGHTS.nightTravel,
+    });
+  if (preferences.preferDirect)
+    active.push({
+      value: penalties.transfers,
+      weight: SOFT_PENALTY_WEIGHTS.transfers,
+    });
+  if (preferences.preferMorningArrival)
+    active.push({
+      value: penalties.arrivalWindow,
+      weight: SOFT_PENALTY_WEIGHTS.arrivalWindow,
+    });
   if (preferences.maxTravelHoursPreferred !== undefined) {
-    active.push(
-      totalTravelMinutes === undefined
-        ? penalties.maxTravelHours
-        : clamp(
-            (totalTravelMinutes / 60 - preferences.maxTravelHoursPreferred) /
-              preferences.maxTravelHoursPreferred,
-          ),
-    );
+    active.push({
+      value:
+        totalTravelMinutes === undefined
+          ? penalties.maxTravelHours
+          : clamp(
+              (totalTravelMinutes / 60 - preferences.maxTravelHoursPreferred) /
+                preferences.maxTravelHoursPreferred,
+            ),
+      weight: SOFT_PENALTY_WEIGHTS.maxTravelHours,
+    });
   }
-  return active.length === 0 ? 0 : clamp(mean(active));
+  if (active.length === 0) return 0;
+  const totalWeight = active.reduce((sum, { weight }) => sum + weight, 0);
+  return clamp(
+    active.reduce((sum, { value, weight }) => sum + value * weight, 0) /
+      totalWeight,
+  );
 }
 
 function nightInstantPenalty(instant: string, timeZone: string): number {

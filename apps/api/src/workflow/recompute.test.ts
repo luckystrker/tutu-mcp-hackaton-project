@@ -52,6 +52,27 @@ describe("recompute workflow", () => {
       ]),
       false,
       "geo-v1.1.0",
+      expect.objectContaining({
+        scoringUsed: DEMO_TRIP.scoringConfig,
+        reconcile: expect.any(Function),
+      }),
+    );
+    const [, , , , , scoringReconcile] =
+      repository.persistIfCurrent.mock.calls[0]!;
+    const reconciled = scoringReconcile!.reconcile({
+      scoring: {
+        together: 1,
+        cost: 0,
+        travel: 0,
+        synchronization: 0,
+        fairness: 0,
+      },
+      readyParticipants: DEMO_PARTICIPANTS.slice(0, 2),
+    });
+    expect(reconciled.output.ranked.length).toBeGreaterThan(0);
+    expect(reconciled.destinations[0]!.score).toBeCloseTo(
+      reconciled.destinations[0]!.components.together,
+      2,
     );
   });
 
@@ -68,6 +89,10 @@ describe("recompute workflow", () => {
       expect.arrayContaining([expect.objectContaining({ degraded: true })]),
       true,
       "geo-v1.1.0",
+      expect.objectContaining({
+        scoringUsed: DEMO_TRIP.scoringConfig,
+        reconcile: expect.any(Function),
+      }),
     );
   });
 
@@ -98,6 +123,10 @@ describe("recompute workflow", () => {
       [],
       true,
       "geo-v1.1.0",
+      expect.objectContaining({
+        scoringUsed: DEMO_TRIP.scoringConfig,
+        reconcile: expect.any(Function),
+      }),
     );
   });
 
@@ -137,6 +166,10 @@ describe("recompute workflow", () => {
       [],
       true,
       "geo-v1.1.0",
+      expect.objectContaining({
+        scoringUsed: DEMO_TRIP.scoringConfig,
+        reconcile: expect.any(Function),
+      }),
     );
   });
 });

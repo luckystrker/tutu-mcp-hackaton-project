@@ -64,6 +64,7 @@ export function solverTrip(
     periodFrom: "2026-09-04T08:00:00.000Z",
     periodTo: "2026-09-06T22:00:00.000Z",
     allowInternational: false,
+    preferredTransportModes: [],
     scoringConfig: BALANCED,
     createdAt: "2026-08-19T00:00:00.000Z",
     updatedAt: "2026-08-19T00:00:00.000Z",

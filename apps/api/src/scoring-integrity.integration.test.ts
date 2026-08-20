@@ -76,7 +76,7 @@ describeDatabase("scoring and membership integrity", () => {
     await database.close();
   });
 
-  it("defers rescore while a recompute is pending and recomputes with new scoring", async () => {
+  it("updates scoring during a recompute without enqueueing new MCP work", async () => {
     tripId = await createReadyTrip();
 
     const deferred = await app.inject({
@@ -87,7 +87,7 @@ describeDatabase("scoring and membership integrity", () => {
     });
     expect(deferred.statusCode, deferred.body).toBe(200);
     const deferredView = TripOrganizerDtoSchema.parse(deferred.json());
-    expect(deferredView.trip.revision).toBe(3);
+    expect(deferredView.trip.revision).toBe(2);
     expect(deferredView.trip.rankingVersion).toBe(1);
 
     const pendingResults = await database.query(
@@ -106,10 +106,7 @@ describeDatabase("scoring and membership integrity", () => {
       `SELECT revision,status FROM rendezvous.recompute_jobs WHERE trip_id=$1 ORDER BY revision`,
       [tripId],
     );
-    expect(jobs.rows).toEqual([
-      { revision: 2, status: "STALE" },
-      { revision: 3, status: "SUCCEEDED" },
-    ]);
+    expect(jobs.rows).toEqual([{ revision: 2, status: "SUCCEEDED" }]);
     const results = await database.query<{
       revision: number;
       ranking_version: number;
@@ -120,7 +117,7 @@ describeDatabase("scoring and membership integrity", () => {
     );
     expect(results.rows).toEqual([
       {
-        revision: 3,
+        revision: 2,
         ranking_version: 1,
         scoring: {
           together: 0.2,
@@ -147,7 +144,7 @@ describeDatabase("scoring and membership integrity", () => {
     }>(`SELECT revision,compute_status FROM rendezvous.trips WHERE id=$1`, [
       tripId,
     ]);
-    expect(trip.rows[0]).toMatchObject({ revision: 4, compute_status: "idle" });
+    expect(trip.rows[0]).toMatchObject({ revision: 3, compute_status: "idle" });
     const events = await database.query<{ type: string }>(
       `SELECT type FROM rendezvous.event_outbox WHERE trip_id=$1 AND type='participant_left'`,
       [tripId],
@@ -163,7 +160,7 @@ describeDatabase("scoring and membership integrity", () => {
     expect(afterLeave.statusCode, afterLeave.body).toBe(200);
 
     const results = await database.query(
-      `SELECT count(*)::int AS count FROM rendezvous.trip_results WHERE trip_id=$1 AND revision=4`,
+      `SELECT count(*)::int AS count FROM rendezvous.trip_results WHERE trip_id=$1 AND revision=3`,
       [tripId],
     );
     expect(results.rows[0]!.count).toBe(0);

@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -9,6 +15,7 @@ import { DEMO_TRIP_IDS, FixtureRendezvousApi } from "../demo/fixtures.js";
 import {
   FinalTripPage,
   ComparePage,
+  CreateTripPage,
   DestinationPage,
   InvitePage,
   LiveRoomPage,
@@ -23,10 +30,28 @@ describe("core trip pages", () => {
   it("keeps previous ranking visible while recompute is running", async () => {
     renderLive(DEMO_TRIP_IDS.running);
     expect(await screen.findByText("Пересчитываем маршрут")).toBeTruthy();
+    expect(screen.getByText("Предварительный результат · 2 из 4")).toBeTruthy();
     expect(screen.getAllByText("Казань").length).toBeGreaterThan(0);
     expect(
       screen.getByText("Пока показываем предыдущий результат"),
     ).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "Катя сделала Ярославль более сбалансированным вариантом.",
+      ),
+    ).toBeTruthy();
+    expect(document.querySelector(".score-change")).toBeTruthy();
+  });
+
+  it("exposes all common trip controls without requiring a period", async () => {
+    renderPage("/new", <Route path="/new" element={<CreateTripPage />} />);
+    expect(screen.getByText("Сколько нас?")).toBeTruthy();
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+    expect(screen.getByLabelText("Хотим провести вместе, часов")).toBeTruthy();
+    expect(
+      screen.getByLabelText("Можно искать встречу за границей"),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Поезд")).toBeTruthy();
   });
 
   it("changes fixture ranking from a preset without a global loading screen", async () => {
@@ -52,6 +77,47 @@ describe("core trip pages", () => {
       screen.queryByPlaceholderText("Например: хочется гулять у воды"),
     ).toBeNull();
     expect(screen.getByRole("link", { name: "Меню поездки" })).toBeTruthy();
+    expect(screen.getAllByText("Подходит").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Спросить про варианты")).toBeTruthy();
+  });
+
+  it("adds and removes a reaction directly on a ranking card", async () => {
+    const user = userEvent.setup();
+    renderLive(DEMO_TRIP_IDS.live);
+    await screen.findByText("Ваш топ-3");
+    const firstCard = document.querySelector<HTMLElement>(".city-card")!;
+    const reaction = within(firstCard).getByRole("button", {
+      name: "Хочу · 1",
+    });
+    await user.click(reaction);
+    await waitFor(() =>
+      expect(
+        within(document.querySelector<HTMLElement>(".city-card")!).getByRole(
+          "button",
+          {
+            name: "Хочу · 2",
+          },
+        ),
+      ).toBeTruthy(),
+    );
+    await user.click(
+      within(document.querySelector<HTMLElement>(".city-card")!).getByRole(
+        "button",
+        {
+          name: "Хочу · 2",
+        },
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        within(document.querySelector<HTMLElement>(".city-card")!).getByRole(
+          "button",
+          {
+            name: "Хочу · 1",
+          },
+        ),
+      ).toBeTruthy(),
+    );
   });
 
   it("provides clear navigation from home and a trip list", async () => {

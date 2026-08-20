@@ -13,12 +13,19 @@ export const CreateTripInputSchema = z
     title: NonEmptyTextSchema,
     expectedParticipants: z.union([z.literal(2), z.literal(3), z.literal(4)]),
     minTogetherMinutes: z.number().int().positive(),
-    periodFrom: IsoDateTimeSchema,
-    periodTo: IsoDateTimeSchema,
+    periodFrom: IsoDateTimeSchema.nullable().default(null),
+    periodTo: IsoDateTimeSchema.nullable().default(null),
     allowInternational: z.boolean().default(false),
+    preferredTransportModes: z
+      .array(TransportModeSchema)
+      .refine((modes) => new Set(modes).size === modes.length)
+      .default([]),
   })
   .refine(
-    (value) => Date.parse(value.periodFrom) < Date.parse(value.periodTo),
+    (value) =>
+      value.periodFrom === null ||
+      value.periodTo === null ||
+      Date.parse(value.periodFrom) < Date.parse(value.periodTo),
     {
       path: ["periodTo"],
       message: "Trip period end must be later than its start",
@@ -81,9 +88,13 @@ export const UpdateTripSettingsInputSchema = z
   .strictObject({
     title: NonEmptyTextSchema.optional(),
     minTogetherMinutes: z.number().int().positive().optional(),
-    periodFrom: IsoDateTimeSchema.optional(),
-    periodTo: IsoDateTimeSchema.optional(),
+    periodFrom: IsoDateTimeSchema.nullable().optional(),
+    periodTo: IsoDateTimeSchema.nullable().optional(),
     allowInternational: z.boolean().optional(),
+    preferredTransportModes: z
+      .array(TransportModeSchema)
+      .refine((modes) => new Set(modes).size === modes.length)
+      .optional(),
   })
   .refine(
     (value) => Object.keys(value).length > 0,

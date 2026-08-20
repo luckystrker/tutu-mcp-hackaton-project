@@ -42,6 +42,7 @@ export interface RendezvousApi {
   ): Promise<TripView>;
   updateScoring(id: string, input: ScoringConfig): Promise<TripView>;
   setReaction(id: string, input: SetReactionInput): Promise<TripView>;
+  deleteReaction(id: string, cityId: string): Promise<TripView>;
   setShortlist(id: string, cityIds: readonly string[]): Promise<TripView>;
   finalize(id: string, destinationResultId: string): Promise<FinalTripDto>;
   subscribeToTrip?(id: string, onEvent: () => void): () => void;
@@ -121,6 +122,12 @@ export class HttpRendezvousApi implements RendezvousApi {
     await this.request(`/api/trips/${id}/reactions`, {
       method: "POST",
       body: JSON.stringify(input),
+    });
+    return this.getTrip(id);
+  }
+  async deleteReaction(id: string, cityId: string) {
+    await this.request(`/api/trips/${id}/reactions/${cityId}`, {
+      method: "DELETE",
     });
     return this.getTrip(id);
   }

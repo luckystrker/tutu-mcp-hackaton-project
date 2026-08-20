@@ -32,9 +32,10 @@ type TripRow = {
   revision: number;
   ranking_version: number;
   min_together_minutes: number;
-  period_from: Date;
-  period_to: Date;
+  period_from: Date | null;
+  period_to: Date | null;
   allow_international: boolean;
+  preferred_transport_modes: Trip["preferredTransportModes"];
   scoring_config: ScoringConfig;
   created_at: Date;
   updated_at: Date;
@@ -141,8 +142,8 @@ export class TripRepository {
       const inserted = await client.query<TripRow>(
         `INSERT INTO rendezvous.trips(
            id,organizer_user_id,invite_token_hash,title,expected_participants,status,compute_status,
-           min_together_minutes,period_from,period_to,allow_international,scoring_config)
-         VALUES($1,$2,$3,$4,$5,'COLLECTING','idle',$6,$7,$8,$9,$10)
+           min_together_minutes,period_from,period_to,allow_international,preferred_transport_modes,scoring_config)
+         VALUES($1,$2,$3,$4,$5,'COLLECTING','idle',$6,$7,$8,$9,$10,$11)
          RETURNING *`,
         [
           id,
@@ -154,6 +155,7 @@ export class TripRepository {
           input.periodFrom,
           input.periodTo,
           input.allowInternational,
+          input.preferredTransportModes,
           JSON.stringify(scoring),
         ],
       );
@@ -399,9 +401,19 @@ export class TripRepository {
       const trip = await lockedTrip(client, tripId);
       requireOrganizer(trip, actorId);
       requireEditable(trip);
-      const periodFrom = input.periodFrom ?? trip.period_from.toISOString();
-      const periodTo = input.periodTo ?? trip.period_to.toISOString();
-      if (Date.parse(periodFrom) >= Date.parse(periodTo))
+      const periodFrom =
+        input.periodFrom === undefined
+          ? (trip.period_from?.toISOString() ?? null)
+          : input.periodFrom;
+      const periodTo =
+        input.periodTo === undefined
+          ? (trip.period_to?.toISOString() ?? null)
+          : input.periodTo;
+      if (
+        periodFrom !== null &&
+        periodTo !== null &&
+        Date.parse(periodFrom) >= Date.parse(periodTo)
+      )
         throw new ApplicationError(
           "INVALID_PERIOD",
           422,
@@ -415,9 +427,9 @@ export class TripRepository {
       const readyCount = Number(ready.rows[0]!.count);
       await client.query(
         `UPDATE rendezvous.trips SET title=$2,min_together_minutes=$3,period_from=$4,period_to=$5,
-           allow_international=$6,revision=$7,
-           status=CASE WHEN $8::int >= 2 THEN 'LIVE' ELSE status END,
-           compute_status=CASE WHEN $8::int >= 2 THEN 'running' ELSE compute_status END,
+           allow_international=$6,preferred_transport_modes=$7,revision=$8,
+           status=CASE WHEN $9::int >= 2 THEN 'LIVE' ELSE status END,
+           compute_status=CASE WHEN $9::int >= 2 THEN 'running' ELSE compute_status END,
            updated_at=now() WHERE id=$1`,
         [
           tripId,
@@ -426,6 +438,7 @@ export class TripRepository {
           periodFrom,
           periodTo,
           input.allowInternational ?? trip.allow_international,
+          input.preferredTransportModes ?? trip.preferred_transport_modes,
           revision,
           readyCount,
         ],
@@ -442,22 +455,9 @@ export class TripRepository {
   ): Promise<{ trip: Trip; solverOutput: SolverOutput | null }> {
     return this.database.transaction(async (client) => {
       const trip = await lockedTrip(client, tripId);
-      requireOrganizer(trip, actorId);
+      await requireMembership(client, actorId, tripId);
       requireEditable(trip);
       const rankingVersion = trip.ranking_version + 1;
-      const activeJob = await client.query(
-        `SELECT 1 FROM rendezvous.recompute_jobs WHERE trip_id=$1 AND revision=$2 AND status IN ('QUEUED','RUNNING')`,
-        [tripId, trip.revision],
-      );
-      if (activeJob.rowCount) {
-        const revision = trip.revision + 1;
-        const superseded = await client.query<TripRow>(
-          `UPDATE rendezvous.trips SET scoring_config=$2,ranking_version=$3,revision=$4,compute_status='running',updated_at=now() WHERE id=$1 RETURNING *`,
-          [tripId, JSON.stringify(scoring), rankingVersion, revision],
-        );
-        await enqueueJob(client, tripId, revision);
-        return { trip: mapTrip(superseded.rows[0]!), solverOutput: null };
-      }
       const row = await client.query<TripRow>(
         `UPDATE rendezvous.trips SET scoring_config=$2,ranking_version=$3,updated_at=now() WHERE id=$1 RETURNING *`,
         [tripId, JSON.stringify(scoring), rankingVersion],
@@ -509,6 +509,9 @@ export class TripRepository {
         `DELETE FROM rendezvous.reactions WHERE trip_id=$1 AND city_id=$2 AND user_id=$3`,
         [tripId, cityId, actorId],
       );
+      await insertEvent(client, tripId, trip.revision, "reaction_removed", {
+        cityId,
+      });
     });
   }
 
@@ -855,6 +858,16 @@ export class TripRepository {
     destinations: readonly DestinationResultDto[],
     workflowDegraded = false,
     candidateAlgorithmVersion = "unknown",
+    scoringReconcile?: {
+      scoringUsed: ScoringConfig;
+      reconcile: (input: {
+        scoring: ScoringConfig;
+        readyParticipants: readonly ParticipantPrivate[];
+      }) => {
+        output: SolverOutput;
+        destinations: readonly DestinationResultDto[];
+      };
+    },
   ): Promise<"persisted" | "stale"> {
     return this.database.transaction(async (client) => {
       const trip = await lockedTrip(client, job.tripId);
@@ -862,11 +875,34 @@ export class TripRepository {
         await markJob(client, job.id, "STALE");
         return "stale";
       }
+      let effectiveOutput = output;
+      let effectiveDestinations = destinations;
+      // Scoring updates do not bump the trip revision, so the weights can
+      // change while the pipeline is running. Reconcile inside this
+      // transaction so the persisted ranking always matches the locked
+      // scoring_config instead of the stale snapshot read by the runner.
+      if (
+        scoringReconcile &&
+        !scoringConfigEquals(trip.scoring_config, scoringReconcile.scoringUsed)
+      ) {
+        const readyRows = await client.query<ParticipantRow>(
+          `SELECT p.*,u.display_name FROM rendezvous.participants p
+           JOIN rendezvous.users u ON u.id=p.user_id
+           WHERE p.trip_id=$1 AND p.ready ORDER BY p.id`,
+          [job.tripId],
+        );
+        const reconciled = scoringReconcile.reconcile({
+          scoring: trip.scoring_config,
+          readyParticipants: readyRows.rows.map(mapParticipant),
+        });
+        effectiveOutput = reconciled.output;
+        effectiveDestinations = reconciled.destinations;
+      }
       const resultId = randomUUID();
       const degraded =
         workflowDegraded ||
-        destinations.some((destination) => destination.degraded);
-      if (degraded && destinations.length === 0) {
+        effectiveDestinations.some((destination) => destination.degraded);
+      if (degraded && effectiveDestinations.length === 0) {
         const previous = await client.query(
           `SELECT 1 FROM rendezvous.trip_results r
            JOIN rendezvous.destination_results d ON d.trip_result_id=r.id
@@ -890,7 +926,7 @@ export class TripRepository {
         }
       }
       const sourceFetchedAt =
-        destinations.map(({ checkedAt }) => checkedAt).sort()[0] ??
+        effectiveDestinations.map(({ checkedAt }) => checkedAt).sort()[0] ??
         new Date().toISOString();
       await client.query(
         `INSERT INTO rendezvous.trip_results(id,trip_id,revision,ranking_version,algorithm_version,
@@ -901,15 +937,15 @@ export class TripRepository {
           job.tripId,
           job.revision,
           trip.ranking_version,
-          output.algorithmVersion,
-          output.scoringAlgorithmVersion,
+          effectiveOutput.algorithmVersion,
+          effectiveOutput.scoringAlgorithmVersion,
           candidateAlgorithmVersion,
           sourceFetchedAt,
           degraded,
-          JSON.stringify(output),
+          JSON.stringify(effectiveOutput),
         ],
       );
-      for (const destination of destinations) {
+      for (const destination of effectiveDestinations) {
         const destinationId = randomUUID();
         await client.query(
           `INSERT INTO rendezvous.destination_results(id,trip_result_id,city_id,rank,score,component_scores,
@@ -929,7 +965,7 @@ export class TripRepository {
             JSON.stringify(destination.hotels),
           ],
         );
-        const solution = output.ranked.find(
+        const solution = effectiveOutput.ranked.find(
           ({ cityId }) => cityId === destination.city.id,
         );
         for (const bundle of solution?.bundles ?? []) {
@@ -956,7 +992,7 @@ export class TripRepository {
       await markJob(client, job.id, "SUCCEEDED");
       await insertEvent(client, job.tripId, job.revision, "ranking_updated", {
         rankingVersion: trip.ranking_version,
-        destinations,
+        destinations: effectiveDestinations,
       });
       await insertEvent(
         client,
@@ -1290,6 +1326,16 @@ async function markJob(
   );
 }
 
+function scoringConfigEquals(a: ScoringConfig, b: ScoringConfig): boolean {
+  return (
+    a.together === b.together &&
+    a.cost === b.cost &&
+    a.travel === b.travel &&
+    a.synchronization === b.synchronization &&
+    a.fairness === b.fairness
+  );
+}
+
 function mapTrip(row: TripRow): Trip {
   return TripSchema.parse({
     id: row.id,
@@ -1301,9 +1347,10 @@ function mapTrip(row: TripRow): Trip {
     revision: row.revision,
     rankingVersion: row.ranking_version,
     minTogetherMinutes: row.min_together_minutes,
-    periodFrom: row.period_from.toISOString(),
-    periodTo: row.period_to.toISOString(),
+    periodFrom: row.period_from?.toISOString() ?? null,
+    periodTo: row.period_to?.toISOString() ?? null,
     allowInternational: row.allow_international,
+    preferredTransportModes: row.preferred_transport_modes,
     scoringConfig: row.scoring_config,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
@@ -1313,8 +1360,8 @@ function mapTrip(row: TripRow): Trip {
 function mapJsonTripRow(row: TripRow): TripRow {
   return {
     ...row,
-    period_from: new Date(row.period_from),
-    period_to: new Date(row.period_to),
+    period_from: row.period_from === null ? null : new Date(row.period_from),
+    period_to: row.period_to === null ? null : new Date(row.period_to),
     created_at: new Date(row.created_at),
     updated_at: new Date(row.updated_at),
   };

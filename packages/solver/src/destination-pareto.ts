@@ -24,13 +24,11 @@ export function destinationFrontier(
   const frontier: DestinationSolution[] = [];
   const dominated: DestinationSolution[] = [];
   for (const [index, candidate] of solutions.entries()) {
-    const otherGroups = solutions.flatMap((other, otherIndex) =>
-      index === otherIndex ? [] : other.groupFrontier,
-    );
-    const isDominated = candidate.groupFrontier.every((candidateGroup) =>
-      otherGroups.some((otherGroup) =>
-        dominatesOnDestinationAxes(otherGroup, candidateGroup),
-      ),
+    // Pareto is defined for the city representatives selected by the solver,
+    // not for arbitrary route combinations hidden inside each city.
+    const isDominated = solutions.some(
+      (other, otherIndex) =>
+        index !== otherIndex && dominatesOnDestinationAxes(other, candidate),
     );
     (isDominated ? dominated : frontier).push(candidate);
   }

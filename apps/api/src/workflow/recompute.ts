@@ -5,7 +5,7 @@ import {
   type CandidateGenerator,
   validateTripForComputation,
 } from "@rendezvous/domain";
-import { solve, type CandidateTravelFacts } from "@rendezvous/solver";
+import { rescore, solve, type CandidateTravelFacts } from "@rendezvous/solver";
 import type {
   AdapterResult,
   SearchLegInput,
@@ -26,6 +26,13 @@ export type RecomputeRepository = Pick<
   | "persistIfCurrent"
   | "markJobStale"
 >;
+
+type RunStats = {
+  mcpCallCount: number;
+  cacheHits: number;
+  successfulRoutePairs: number;
+  solverDurationMs: number;
+};
 
 const JobSchema = z.strictObject({
   id: z.uuid(),
@@ -53,6 +60,10 @@ export interface RecomputeMetrics {
     rejected: number;
     exploredSolutions: number;
     degraded: boolean;
+    mcpCallCount: number;
+    cacheHitRate: number;
+    successfulRoutePairs: number;
+    solverDurationMs: number;
   }): void;
 }
 
@@ -65,6 +76,10 @@ export class InMemoryRecomputeMetrics implements RecomputeMetrics {
     rejected: number;
     exploredSolutions: number;
     degraded: boolean;
+    mcpCallCount: number;
+    cacheHitRate: number;
+    successfulRoutePairs: number;
+    solverDurationMs: number;
   }> = [];
 
   recordRecomputeLatencyReadyToPublished(milliseconds: number): void {
@@ -90,6 +105,10 @@ export class InMemoryRecomputeMetrics implements RecomputeMetrics {
     const durations = this.workflowRuns
       .map(({ durationMs }) => durationMs)
       .sort((a, b) => a - b);
+    const mcpCallCount = this.workflowRuns.reduce(
+      (sum, run) => sum + run.mcpCallCount,
+      0,
+    );
     return {
       runs: this.workflowRuns.length,
       p95DurationMs:
@@ -99,6 +118,21 @@ export class InMemoryRecomputeMetrics implements RecomputeMetrics {
       rejected: this.workflowRuns.at(-1)?.rejected ?? 0,
       exploredSolutions: this.workflowRuns.at(-1)?.exploredSolutions ?? 0,
       degradedRuns: this.workflowRuns.filter(({ degraded }) => degraded).length,
+      mcpCallCount,
+      cacheHitRate:
+        mcpCallCount === 0
+          ? 0
+          : this.workflowRuns.reduce(
+              (sum, run) => sum + run.cacheHitRate * run.mcpCallCount,
+              0,
+            ) / mcpCallCount,
+      successfulRoutePairs: this.workflowRuns.reduce(
+        (sum, run) => sum + run.successfulRoutePairs,
+        0,
+      ),
+      solverDurationMs: Math.round(
+        this.workflowRuns.at(-1)?.solverDurationMs ?? 0,
+      ),
     };
   }
 }
@@ -129,6 +163,7 @@ export class RecomputeRunner {
       tripId: job.tripId,
       revision: job.revision,
       jobId: job.id,
+      runId: `recompute-${job.id}`,
     };
     this.log.info(logFields, "recompute started");
     await this.repository.emitProgress(job.tripId, job.revision, "load", 5);
@@ -159,6 +194,12 @@ export class RecomputeRunner {
       limit: 8,
     });
     const factsByCity = new Map<string, CandidateTravelFacts>();
+    const stats: RunStats = {
+      mcpCallCount: 0,
+      cacheHits: 0,
+      successfulRoutePairs: 0,
+      solverDurationMs: 0,
+    };
     let degraded = false;
     await this.searchCandidates(
       initial.map(({ cityId }) => cityId),
@@ -169,6 +210,7 @@ export class RecomputeRunner {
       (partial) => {
         degraded ||= partial;
       },
+      stats,
     );
     await this.repository.emitProgress(
       job.tripId,
@@ -176,12 +218,14 @@ export class RecomputeRunner {
       "transport",
       55,
     );
+    let solverStartedAt = performance.now();
     let preliminary = solve({
       trip: validated.value,
       candidates: [...factsByCity.values()],
       scoring: snapshot.trip.scoringConfig,
       algorithmVersion: "solver-v1",
     });
+    stats.solverDurationMs += performance.now() - solverStartedAt;
 
     if (preliminary.ranked.length === 0) {
       const expanded = this.candidateGenerator.generate({
@@ -202,13 +246,16 @@ export class RecomputeRunner {
         (partial) => {
           degraded ||= partial;
         },
+        stats,
       );
+      solverStartedAt = performance.now();
       preliminary = solve({
         trip: validated.value,
         candidates: [...factsByCity.values()],
         scoring: snapshot.trip.scoringConfig,
         algorithmVersion: "solver-v1",
       });
+      stats.solverDurationMs += performance.now() - solverStartedAt;
     }
 
     if ((await this.repository.currentRevision(job.tripId)) !== job.revision) {
@@ -232,6 +279,7 @@ export class RecomputeRunner {
         });
         continue;
       }
+      stats.mcpCallCount += 1;
       const result = await safeAdapterCall("searchHotels", signal, () =>
         this.adapter.searchHotels(
           {
@@ -245,6 +293,7 @@ export class RecomputeRunner {
           signal,
         ),
       );
+      if (result.status === "cached") stats.cacheHits += 1;
       degraded ||= result.status === "partial";
       const current = factsByCity.get(solution.cityId)!;
       if (result.availability === "none") {
@@ -266,12 +315,18 @@ export class RecomputeRunner {
     const enrichedFacts = [...factsByCity.values()].filter(({ cityId }) =>
       enrichedCities.has(cityId),
     );
+    // Scoring is deliberately revision-independent: a slider update must not
+    // cancel this travel run or trigger another MCP fan-out. Read the latest
+    // weights immediately before the final pure solver pass.
+    const currentSnapshot = await this.repository.getPrivateTrip(job.tripId);
+    solverStartedAt = performance.now();
     const output = solve({
       trip: validated.value,
       candidates: enrichedFacts,
-      scoring: snapshot.trip.scoringConfig,
+      scoring: currentSnapshot.trip.scoringConfig,
       algorithmVersion: "solver-v1",
     });
+    stats.solverDurationMs += performance.now() - solverStartedAt;
     let destinations = projectSolverOutput(output, this.#cityById);
     if (degraded)
       destinations = destinations.map((destination) => ({
@@ -285,6 +340,25 @@ export class RecomputeRunner {
       destinations,
       degraded,
       this.candidateGenerator.algorithmVersion,
+      {
+        scoringUsed: currentSnapshot.trip.scoringConfig,
+        reconcile: ({ scoring, readyParticipants }) => {
+          const reconciled = rescore(
+            output,
+            readyParticipants as Parameters<typeof rescore>[1],
+            scoring,
+          );
+          let reconciledDestinations = projectSolverOutput(
+            reconciled,
+            this.#cityById,
+          );
+          if (degraded)
+            reconciledDestinations = reconciledDestinations.map(
+              (destination) => ({ ...destination, degraded: true }),
+            );
+          return { output: reconciled, destinations: reconciledDestinations };
+        },
+      },
     );
     const status = persisted === "persisted" ? "PERSISTED" : "STALE";
     this.log.info(
@@ -295,6 +369,11 @@ export class RecomputeRunner {
         ranked: destinations.length,
         durationMs: Math.round(performance.now() - startedAt),
         degraded,
+        mcpCallCount: stats.mcpCallCount,
+        cacheHitRate:
+          stats.mcpCallCount === 0 ? 0 : stats.cacheHits / stats.mcpCallCount,
+        successfulRoutePairs: stats.successfulRoutePairs,
+        solverDurationMs: Math.round(stats.solverDurationMs),
       },
       "recompute finished",
     );
@@ -312,6 +391,11 @@ export class RecomputeRunner {
         0,
       ),
       degraded,
+      mcpCallCount: stats.mcpCallCount,
+      cacheHitRate:
+        stats.mcpCallCount === 0 ? 0 : stats.cacheHits / stats.mcpCallCount,
+      successfulRoutePairs: stats.successfulRoutePairs,
+      solverDurationMs: stats.solverDurationMs,
     });
     return { status, destinations: destinations.length };
   }
@@ -323,6 +407,7 @@ export class RecomputeRunner {
     factsByCity: Map<string, CandidateTravelFacts>,
     signal: AbortSignal,
     reportPartial: (partial: boolean) => void,
+    stats: RunStats,
   ): Promise<void> {
     const searchable = cityIds.filter(
       (cityId) =>
@@ -360,6 +445,12 @@ export class RecomputeRunner {
                   this.adapter.searchReturn(returnInput, signal),
                 ),
               ]);
+              stats.mcpCallCount += 2;
+              stats.cacheHits +=
+                Number(outbound.status === "cached") +
+                Number(returning.status === "cached");
+              if (outbound.data.length > 0 && returning.data.length > 0)
+                stats.successfulRoutePairs += 1;
               reportPartial(
                 outbound.status === "partial" || returning.status === "partial",
               );

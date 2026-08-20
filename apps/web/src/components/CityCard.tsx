@@ -8,12 +8,16 @@ export function CityCard({
   active = false,
   onSelect,
   previousScore,
+  onReact,
+  reactionPending = false,
 }: {
   tripId: string;
   destination: DestinationResultDto;
   active?: boolean;
   onSelect?: () => void;
   previousScore?: number | undefined;
+  onReact?: (value: "love" | "ok" | "dislike" | null) => void;
+  reactionPending?: boolean;
 }) {
   const delta =
     previousScore === undefined ? 0 : destination.score - previousScore;
@@ -44,6 +48,31 @@ export function CityCard({
       </div>
       {destination.degraded && (
         <p className="degraded-label">Неполные данные</p>
+      )}
+      {onReact && (
+        <div className="card-reactions" aria-label="Реакции на город">
+          {(
+            [
+              ["love", "Хочу"],
+              ["ok", "Ок"],
+              ["dislike", "Нет"],
+            ] as const
+          ).map(([value, label]) => {
+            const selected = destination.reactions?.mine === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-label={`${label} · ${destination.reactions?.[value] ?? 0}`}
+                aria-pressed={selected}
+                disabled={reactionPending}
+                onClick={() => onReact(selected ? null : value)}
+              >
+                {label} · {destination.reactions?.[value] ?? 0}
+              </button>
+            );
+          })}
+        </div>
       )}
       <div className="city-card__actions">
         {onSelect && (

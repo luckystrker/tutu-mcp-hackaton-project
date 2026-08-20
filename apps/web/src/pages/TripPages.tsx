@@ -7,6 +7,7 @@ import {
 } from "@rendezvous/contracts";
 import { CITY_CATALOG } from "@rendezvous/domain";
 import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   advancedSlidersToWeights,
   presetToWeights,
@@ -123,10 +124,11 @@ export function CreateTripPage() {
     const parsed = CreateTripInputSchema.safeParse({
       title: data.get("title"),
       expectedParticipants: Number(data.get("people")),
-      minTogetherMinutes: 720,
-      periodFrom: safeIso(data.get("from")),
-      periodTo: safeIso(data.get("to")),
-      allowInternational: false,
+      minTogetherMinutes: Number(data.get("minTogetherHours")) * 60,
+      periodFrom: optionalIso(data.get("from")),
+      periodTo: optionalIso(data.get("to")),
+      allowInternational: data.get("allowInternational") === "on",
+      preferredTransportModes: data.getAll("preferredTransport"),
     });
     if (!parsed.success) return setError("Проверьте название и даты поездки");
     setBusy(true);
@@ -158,29 +160,65 @@ export function CreateTripPage() {
           </label>
           <div className="form-grid">
             <label>
-              С
-              <input
-                name="from"
-                type="datetime-local"
-                defaultValue="2026-09-04T15:00"
-              />
+              Примерно с <small>необязательно</small>
+              <input name="from" type="datetime-local" />
             </label>
             <label>
-              До
-              <input
-                name="to"
-                type="datetime-local"
-                defaultValue="2026-09-06T21:00"
-              />
+              Примерно до <small>необязательно</small>
+              <input name="to" type="datetime-local" />
             </label>
           </div>
+          <fieldset className="choice-fieldset">
+            <legend>Сколько нас?</legend>
+            <div className="number-choices">
+              {[2, 3, 4].map((count) => (
+                <label key={count}>
+                  <input
+                    type="radio"
+                    name="people"
+                    value={count}
+                    defaultChecked={count === 4}
+                  />
+                  <span>{count}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <label>
-            Сколько вас
-            <select name="people" defaultValue="4">
-              <option>2</option>
-              <option>3</option>
-              <option>4</option>
-            </select>
+            Хотим провести вместе, часов
+            <input
+              name="minTogetherHours"
+              type="number"
+              min="1"
+              max="96"
+              defaultValue="12"
+            />
+          </label>
+          <fieldset className="choice-fieldset">
+            <legend>Как приятнее добираться</legend>
+            <div className="checks">
+              <label>
+                <input
+                  type="checkbox"
+                  name="preferredTransport"
+                  value="train"
+                  defaultChecked
+                />
+                Поезд
+              </label>
+              <label>
+                <input type="checkbox" name="preferredTransport" value="air" />
+                Самолёт
+              </label>
+              <label>
+                <input type="checkbox" name="preferredTransport" value="bus" />
+                Автобус
+              </label>
+            </div>
+          </fieldset>
+          <label className="toggle-row">
+            <input type="checkbox" name="allowInternational" />
+            Можно искать встречу за границей
           </label>
           {error && <p className="form-error">{error}</p>}
           <button className="primary-button" disabled={busy}>
@@ -451,9 +489,9 @@ export function PreferencesPage() {
       forbiddenModes: data.getAll("forbidden"),
       softPreferences: {
         ...natural,
-        preferDirect: data.get("direct") === "on" || natural.preferDirect,
+        preferDirect: data.get("direct") === "yes" || natural.preferDirect,
         avoidNightTravel:
-          data.get("avoidNight") === "on" || natural.avoidNightTravel,
+          data.get("avoidNight") === "yes" || natural.avoidNightTravel,
         preferMorningArrival:
           data.get("morning") === "on" || natural.preferMorningArrival,
         maxTravelHoursPreferred:
@@ -486,7 +524,9 @@ export function PreferencesPage() {
           <span>◉</span>
           <div>
             <strong>Это видишь только ты</strong>
-            <p>Группа увидит лишь статус готовности.</p>
+            <p>
+              Группа увидит готовность и общий статус «подходит / конфликт».
+            </p>
           </div>
         </div>
         <form onSubmit={submit} className="constraint-form">
@@ -511,7 +551,9 @@ export function PreferencesPage() {
                 <input
                   name="from"
                   type="datetime-local"
-                  defaultValue="2026-09-04T15:00"
+                  defaultValue={toDateTimeLocal(
+                    view.me.availableFrom ?? view.trip.periodFrom,
+                  )}
                 />
               </label>
               <label>
@@ -519,7 +561,9 @@ export function PreferencesPage() {
                 <input
                   name="to"
                   type="datetime-local"
-                  defaultValue="2026-09-06T20:00"
+                  defaultValue={toDateTimeLocal(
+                    view.me.mustReturnBy ?? view.trip.periodTo,
+                  )}
                 />
               </label>
             </div>
@@ -557,14 +601,39 @@ export function PreferencesPage() {
               <p className="field-hint">
                 Они помогут расставить варианты, но не исключат города.
               </p>
+              <fieldset className="preference-scale">
+                <legend>Ночной транспорт</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="avoidNight"
+                    value="no"
+                    defaultChecked
+                  />
+                  Нормально
+                </label>
+                <label>
+                  <input type="radio" name="avoidNight" value="yes" />
+                  Лучше не надо
+                </label>
+              </fieldset>
+              <fieldset className="preference-scale">
+                <legend>Пересадки</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="direct"
+                    value="yes"
+                    defaultChecked
+                  />
+                  Лучше без них
+                </label>
+                <label>
+                  <input type="radio" name="direct" value="no" />
+                  Неважно
+                </label>
+              </fieldset>
               <div className="checks">
-                <label>
-                  <input type="checkbox" name="direct" defaultChecked /> Без
-                  пересадок
-                </label>
-                <label>
-                  <input type="checkbox" name="avoidNight" /> Без ночных поездок
-                </label>
                 <label>
                   <input type="checkbox" name="morning" /> Прибытие утром
                 </label>
@@ -577,6 +646,17 @@ export function PreferencesPage() {
                 </label>
                 <label>
                   <input type="checkbox" name="tags" value="quiet" /> Спокойно
+                </label>
+                <label>
+                  <input type="checkbox" name="tags" value="nature" /> Природа
+                </label>
+                <label>
+                  <input type="checkbox" name="tags" value="small-city" /> Малый
+                  город
+                </label>
+                <label>
+                  <input type="checkbox" name="tags" value="nightlife" />{" "}
+                  Вечерняя жизнь
                 </label>
               </div>
               <label>
@@ -619,6 +699,35 @@ export function LiveRoomPage() {
   const select = useTripUi((s) => s.selectCity);
   const ranking = useRankingViewState(view?.destinations ?? []);
   const retry = useRetryComputationMutation(id);
+  const reaction = useReactionMutation(id);
+  const reduceMotion = useReducedMotion();
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const previousReady = useRef<ReadonlySet<string> | null>(null);
+  const [balanceNotice, setBalanceNotice] = useState("");
+  useEffect(() => {
+    if (!view) return;
+    const readyIds = new Set(
+      view.participants.filter(({ ready }) => ready).map(({ id }) => id),
+    );
+    const previous = previousReady.current;
+    if (previous) {
+      const joined = view.participants.find(
+        ({ id: participantId, ready }) => ready && !previous.has(participantId),
+      );
+      const leading = view.destinations[0];
+      if (joined && leading)
+        setBalanceNotice(
+          `${joined.displayName} сделал${/[ая]$/u.test(joined.displayName) ? "а" : ""} ${leading.city.name} более сбалансированным вариантом.`,
+        );
+    }
+    previousReady.current = readyIds;
+  }, [view]);
+  useEffect(() => {
+    carouselRef.current?.scrollTo?.({
+      left: 0,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, [reduceMotion, view?.destinations[0]?.city.id]);
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   if (!view.me.ready) return <Navigate to={`/trips/${id}/me`} replace />;
@@ -644,9 +753,21 @@ export function LiveRoomPage() {
         </header>
         <div className="participant-strip">
           {view.participants.map((p) => (
-            <div key={p.id} className={p.ready ? "ready" : ""}>
+            <div
+              key={p.id}
+              className={`${p.ready ? "ready" : ""} ${p.suitability === "conflict" ? "conflict" : ""}`}
+            >
               <span>{p.displayName[0]}</span>
               <small>{p.displayName}</small>
+              <b>
+                {p.suitability === "suitable"
+                  ? "Подходит"
+                  : p.suitability === "conflict"
+                    ? "Есть конфликт"
+                    : p.ready
+                      ? "Считаем"
+                      : "Ждём"}
+              </b>
             </div>
           ))}
         </div>
@@ -671,24 +792,51 @@ export function LiveRoomPage() {
           </div>
           {view.destinations.length > 1 && <span>листайте →</span>}
         </section>
+        {view.destinations.length > 0 &&
+          ready < view.trip.expectedParticipants && (
+            <p className="preliminary-label">
+              Предварительный результат · {ready} из{" "}
+              {view.trip.expectedParticipants}
+            </p>
+          )}
+        {balanceNotice && (
+          <p className="balance-notice" role="status">
+            {balanceNotice}
+          </p>
+        )}
         {view.destinations[0] && (
           <p className="checked-at">
             Проверено {formatDateTime(view.destinations[0].checkedAt)}
           </p>
         )}
         {view.destinations.length ? (
-          <div className="city-carousel">
-            {ranking.destinations.map((d) => (
-              <div className="card-button" key={d.city.id}>
-                <CityCard
-                  tripId={id}
-                  destination={d}
-                  active={d.city.id === active?.city.id}
-                  onSelect={() => select(id, d.city.id)}
-                  previousScore={ranking.previousScores.get(d.city.id)}
-                />
-              </div>
-            ))}
+          <div className="city-carousel" ref={carouselRef}>
+            <AnimatePresence initial={false} mode="popLayout">
+              {ranking.destinations.map((d) => (
+                <motion.div
+                  layout
+                  className="card-button"
+                  key={d.city.id}
+                  transition={
+                    reduceMotion
+                      ? { duration: 0 }
+                      : { type: "spring", stiffness: 420, damping: 34 }
+                  }
+                >
+                  <CityCard
+                    tripId={id}
+                    destination={d}
+                    active={d.city.id === active?.city.id}
+                    onSelect={() => select(id, d.city.id)}
+                    previousScore={ranking.previousScores.get(d.city.id)}
+                    reactionPending={reaction.isPending}
+                    onReact={(value) =>
+                      reaction.mutate({ cityId: d.city.id, value })
+                    }
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
         ) : (
           <>
@@ -703,6 +851,7 @@ export function LiveRoomPage() {
           </>
         )}
         <ScoringPanel id={id} view={view} />
+        {view.destinations.length > 0 && <AiQuestionBox id={id} view={view} />}
       </main>
     </AppFrame>
   );
@@ -716,11 +865,11 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
     economyComfort: 0.5,
     efficiencyFairness: 0.5,
   }));
-  const presets: ReadonlyArray<[string, ScoringPreset]> = [
-    ["Баланс", "balanced"],
-    ["Подешевле", "cheapest"],
-    ["Справедливо", "fairest"],
-    ["Больше времени", "more-time"],
+  const presets: ReadonlyArray<[string, string, ScoringPreset]> = [
+    ["✨", "Баланс", "balanced"],
+    ["💸", "Подешевле", "cheapest"],
+    ["⚖️", "Справедливо", "fairest"],
+    ["⏱", "Больше времени вместе", "more-time"],
   ];
   const apply = (next: ScoringConfig) => {
     setState((current) => ({ ...current, draft: next, applied: next }));
@@ -734,16 +883,17 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
     <details className="scoring-panel">
       <summary>Что для вас важнее?</summary>
       <div className="preset-row">
-        {presets.map(([name, preset]) => (
+        {presets.map(([mark, name, preset]) => (
           <button
             key={preset}
+            aria-label={name}
             aria-pressed={scoringConfigEquals(
               state.applied,
               presetToWeights(preset),
             )}
             onClick={() => apply(presetToWeights(preset))}
           >
-            {name}
+            <span aria-hidden="true">{mark}</span> {name}
           </button>
         ))}
       </div>
@@ -799,6 +949,56 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
             : "Без нового поиска маршрутов"}
       </small>
     </details>
+  );
+}
+
+function AiQuestionBox({ id, view }: { id: string; view: TripView }) {
+  const [question, setQuestion] = useState("");
+  const [input, setInput] = useState<
+    Parameters<typeof useExplanation>[1] | undefined
+  >();
+  const explanation = useExplanation(id, input);
+  const ask = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const first = view.destinations[0];
+    if (!first) return;
+    const normalized = question.toLocaleLowerCase("ru");
+    const second = view.destinations[1];
+    setInput(
+      normalized.includes("сравн") && second
+        ? { type: "compare", cityA: first.city.id, cityB: second.city.id }
+        : normalized.includes("измен") || normalized.includes("если")
+          ? { type: "counterfactual", cityId: first.city.id }
+          : { type: "why", cityId: first.city.id },
+    );
+  };
+  return (
+    <section className="ai-question-box">
+      <form onSubmit={ask}>
+        <label htmlFor={`question-${id}`}>Спросить про варианты</label>
+        <div>
+          <input
+            id={`question-${id}`}
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="Например: почему первый город лучше?"
+            maxLength={500}
+          />
+          <button className="secondary-button" disabled={!question.trim()}>
+            Спросить
+          </button>
+        </div>
+      </form>
+      {explanation.isFetching && (
+        <p role="status">Сверяем рассчитанные факты…</p>
+      )}
+      {explanation.data && <p>{explanation.data.text}</p>}
+      {explanation.isError && (
+        <p className="form-error" role="alert">
+          Не удалось ответить. Попробуйте переформулировать вопрос.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -1033,7 +1233,10 @@ export function ShortlistPage() {
                     className={counts.mine === value ? "selected" : ""}
                     disabled={reaction.isPending}
                     onClick={() =>
-                      reaction.mutate({ cityId: item.city.id, value })
+                      reaction.mutate({
+                        cityId: item.city.id,
+                        value: counts.mine === value ? null : value,
+                      })
                     }
                   >
                     {label} · {counts[value]}
@@ -1394,6 +1597,19 @@ function useTripId() {
 function safeIso(value: FormDataEntryValue | null): string {
   const date = new Date(String(value ?? ""));
   return Number.isNaN(date.valueOf()) ? "" : date.toISOString();
+}
+
+function optionalIso(value: FormDataEntryValue | null): string | null {
+  const raw = String(value ?? "").trim();
+  return raw ? safeIso(raw) || null : null;
+}
+
+function toDateTimeLocal(value: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return "";
+  const local = new Date(date.valueOf() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 function statusLabel(status: TripPublic["status"]): string {

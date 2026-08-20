@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import type {
+  DestinationResultDto,
   ScoringConfig,
   ExplainInput,
   SetReactionInput,
@@ -105,6 +106,17 @@ export function useScoringMutation(id: string) {
       const view = await api.updateScoring(id, input);
       return { seq, view };
     },
+    onMutate: (input) => {
+      const previous = client.getQueryData<unknown>(tripKeys.detail(id));
+      client.setQueryData(tripKeys.detail(id), (current: unknown) =>
+        optimisticallyRescore(current, input),
+      );
+      return { previous };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous !== undefined)
+        client.setQueryData(tripKeys.detail(id), context.previous);
+    },
     onSuccess: ({ seq, view }) => {
       if (seq === latestRequest.current)
         client.setQueryData(tripKeys.detail(id), view);
@@ -112,11 +124,49 @@ export function useScoringMutation(id: string) {
   });
 }
 
+function optimisticallyRescore(current: unknown, scoring: ScoringConfig) {
+  if (!current || typeof current !== "object" || !("destinations" in current))
+    return current;
+  const view = current as {
+    trip: { scoringConfig: ScoringConfig };
+    destinations: readonly DestinationResultDto[];
+  };
+  const total = Object.values(scoring).reduce((sum, value) => sum + value, 0);
+  const destinations = view.destinations
+    .map((destination) => ({
+      ...destination,
+      score:
+        Math.round(
+          (Object.entries(scoring).reduce(
+            (sum, [key, value]) =>
+              sum +
+              destination.components[
+                key as keyof DestinationResultDto["components"]
+              ] *
+                value,
+            0,
+          ) /
+            total) *
+            100,
+        ) / 100,
+    }))
+    .sort((left, right) => right.score - left.score)
+    .map((destination, index) => ({ ...destination, rank: index + 1 }));
+  return {
+    ...view,
+    trip: { ...view.trip, scoringConfig: scoring },
+    destinations,
+  };
+}
+
 export function useReactionMutation(id: string) {
   const api = useApi();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: SetReactionInput) => api.setReaction(id, input),
+    mutationFn: (input: SetReactionInput | { cityId: string; value: null }) =>
+      input.value === null
+        ? api.deleteReaction(id, input.cityId)
+        : api.setReaction(id, input),
     onSuccess: (view) => client.setQueryData(tripKeys.detail(id), view),
   });
 }

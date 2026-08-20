@@ -61,6 +61,10 @@ export const TripEventSchema = z.discriminatedUnion("type", [
     }),
   }),
   EventBaseSchema.extend({
+    type: z.literal("reaction_removed"),
+    payload: z.strictObject({ cityId: EntityIdSchema }),
+  }),
+  EventBaseSchema.extend({
     type: z.literal("trip_finalized"),
     payload: z.strictObject({ cityId: EntityIdSchema }),
   }),

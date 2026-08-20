@@ -192,6 +192,20 @@ export const tripRoutes: FastifyPluginAsync<{
     );
   });
 
+  app.post("/api/trips/:tripId/join", async (request) => {
+    const { tripId } = ParamsSchema.parse(request.params);
+    const { inviteToken } = z
+      .strictObject({ inviteToken: z.string().regex(/^[A-Za-z0-9_-]{22}$/) })
+      .parse(request.body);
+    return TripViewSchema.parse(
+      await options.service.joinTrip(
+        await options.authenticator.authenticate(request.headers),
+        tripId,
+        inviteToken,
+      ),
+    );
+  });
+
   app.get("/api/trips/:tripId/me/preferences", async (request) => {
     const { tripId } = ParamsSchema.parse(request.params);
     const view = await options.service.getTrip(

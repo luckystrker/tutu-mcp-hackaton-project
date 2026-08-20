@@ -16,12 +16,33 @@ export function projectAggregate(
 ): TripGroupDto | TripOrganizerDto {
   const trip = omitOrganizer(aggregate.trip);
   const me = omitUser(aggregate.actorParticipant);
+  const leadingDestination = aggregate.destinations[0];
+  const coveredParticipants = new Set(
+    leadingDestination?.routes.map(({ participantId }) => participantId) ?? [],
+  );
+  // A participant can only conflict with a computation outcome. Waiting for
+  // people, a running job, or an infrastructure failure says nothing about
+  // suitability; only a completed computation that found no feasible option
+  // for them is a conflict.
+  const awaitingOutcome =
+    leadingDestination === undefined &&
+    (["COLLECTING", "CREATED"].includes(aggregate.trip.status) ||
+      aggregate.trip.computeStatus === "running" ||
+      aggregate.trip.computeStatus === "failed");
   const participants: ParticipantGroupDto[] = aggregate.participants.map(
     (participant) => ({
       id: participant.id,
       displayName: participant.displayName,
       ready: participant.ready,
-      suitability: "unknown",
+      suitability: !participant.ready
+        ? "unknown"
+        : awaitingOutcome
+          ? "unknown"
+          : leadingDestination === undefined
+            ? "conflict"
+            : coveredParticipants.has(participant.id)
+              ? "suitable"
+              : "conflict",
     }),
   );
   const group: TripGroupDto = {
