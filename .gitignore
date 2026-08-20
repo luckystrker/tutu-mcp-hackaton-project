@@ -11,3 +11,6 @@ test-results/
 .vite/
 *.tsbuildinfo
 .DS_Store
+.claude/
+.codex/
+.impeccable/

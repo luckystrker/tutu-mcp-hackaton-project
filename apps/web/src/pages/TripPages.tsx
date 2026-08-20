@@ -12,7 +12,7 @@ import {
   presetToWeights,
   type ScoringPreset,
 } from "@rendezvous/solver/presets";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type Ref } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useApi } from "../app/providers.js";
 import { AppFrame } from "../components/AppFrame.js";
@@ -462,7 +462,16 @@ export function PreferencesPage() {
       },
       ready: true,
     });
-    if (!parsed.success) return setError("Проверьте временное окно и бюджет");
+    if (!parsed.success) {
+      const invalidReturn = parsed.error.issues.some((issue) =>
+        issue.path.includes("mustReturnBy"),
+      );
+      return setError(
+        invalidReturn
+          ? "Время возвращения должно быть позже времени выезда"
+          : "Укажите город, даты и бюджет больше нуля",
+      );
+    }
     try {
       await mutation.mutateAsync(parsed.data);
     } catch {
@@ -471,7 +480,7 @@ export function PreferencesPage() {
     navigate(`/trips/${id}/live`);
   }
   return (
-    <AppFrame title="Мои условия" back tripId={id}>
+    <AppFrame title="Мои условия" back tripId={id} hideTripNav>
       <main className="form-page">
         <div className="privacy-note">
           <span>◉</span>
@@ -538,50 +547,62 @@ export function PreferencesPage() {
               </label>
             </div>
           </fieldset>
-          <fieldset>
-            <legend>
-              Пожелания <small>не блокируют варианты</small>
-            </legend>
-            <div className="checks">
+          <details className="optional-preferences">
+            <summary>
+              <span>Уточнить пожелания</span>
+              <small>выбрано: без пересадок</small>
+            </summary>
+            <fieldset>
+              <legend className="sr-only">Дополнительные пожелания</legend>
+              <p className="field-hint">
+                Они помогут расставить варианты, но не исключат города.
+              </p>
+              <div className="checks">
+                <label>
+                  <input type="checkbox" name="direct" defaultChecked /> Без
+                  пересадок
+                </label>
+                <label>
+                  <input type="checkbox" name="avoidNight" /> Без ночных поездок
+                </label>
+                <label>
+                  <input type="checkbox" name="morning" /> Прибытие утром
+                </label>
+                <label>
+                  <input type="checkbox" name="tags" value="history" />
+                  История
+                </label>
+                <label>
+                  <input type="checkbox" name="tags" value="food" /> Еда
+                </label>
+                <label>
+                  <input type="checkbox" name="tags" value="quiet" /> Спокойно
+                </label>
+              </div>
               <label>
-                <input type="checkbox" name="direct" defaultChecked /> Без
-                пересадок
+                Не дольше, часов
+                <input
+                  name="maxHours"
+                  type="number"
+                  min="1"
+                  max="168"
+                  placeholder="Например, 8"
+                />
               </label>
               <label>
-                <input type="checkbox" name="avoidNight" /> Без ночных поездок
+                Своими словами <small>необязательно</small>
+                <input
+                  name="naturalPreference"
+                  placeholder="Например: хочется гулять у воды"
+                />
               </label>
-              <label>
-                <input type="checkbox" name="morning" /> Прибытие утром
-              </label>
-              <label>
-                <input type="checkbox" name="tags" value="history" /> История
-              </label>
-              <label>
-                <input type="checkbox" name="tags" value="food" /> Еда
-              </label>
-              <label>
-                <input type="checkbox" name="tags" value="quiet" /> Спокойно
-              </label>
-            </div>
-            <label>
-              Желательно не дольше, часов
-              <input
-                name="maxHours"
-                type="number"
-                min="1"
-                max="168"
-                placeholder="8"
-              />
-            </label>
-            <label>
-              Пожелание своими словами <small>необязательно</small>
-              <input
-                name="naturalPreference"
-                placeholder="Например: хочется гулять у воды"
-              />
-            </label>
-          </fieldset>
-          {error && <p className="form-error">{error}</p>}
+            </fieldset>
+          </details>
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
           <button className="primary-button" disabled={mutation.isPending}>
             {mutation.isPending ? "Сохраняем…" : "Готово, считать варианты"}
           </button>
@@ -617,8 +638,8 @@ export function LiveRoomPage() {
               {ready} из {view.trip.expectedParticipants} <em>готовы</em>
             </h1>
           </div>
-          <Link className="round-link" to={`/trips/${id}/me`}>
-            ＋
+          <Link className="edit-conditions-link" to={`/trips/${id}/me`}>
+            Изменить условия
           </Link>
         </header>
         <div className="participant-strip">
@@ -714,7 +735,14 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
       <summary>Что для вас важнее?</summary>
       <div className="preset-row">
         {presets.map(([name, preset]) => (
-          <button key={preset} onClick={() => apply(presetToWeights(preset))}>
+          <button
+            key={preset}
+            aria-pressed={scoringConfigEquals(
+              state.applied,
+              presetToWeights(preset),
+            )}
+            onClick={() => apply(presetToWeights(preset))}
+          >
             {name}
           </button>
         ))}
@@ -864,9 +892,9 @@ export function ComparePage() {
             </div>
           ))}
           <div className="compare-row">
-            <span>Стоимость</span>
+            <span>Дорога на человека</span>
             {view.destinations.map((d) => (
-              <b key={d.city.id}>{formatMoney(d.routes[0]?.estimatedCost)}</b>
+              <b key={d.city.id}>{formatRouteCostRange(d.routes)}</b>
             ))}
           </div>
         </div>
@@ -912,12 +940,23 @@ export function ShortlistPage() {
   const id = useTripId();
   const { data: view, isLoading, error } = useTrip(id);
   const [selected, setSelected] = useState<string[]>([]);
+  const [winnerId, setWinnerId] = useState("");
+  const [selectionError, setSelectionError] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const confirmationRef = useRef<HTMLElement>(null);
   const reaction = useReactionMutation(id);
   const shortlist = useShortlistMutation(id);
   const finalize = useFinalizeMutation(id);
   useEffect(() => {
-    if (view) setSelected([...view.shortlist.cityIds]);
+    if (!view) return;
+    const cityIds = [...view.shortlist.cityIds];
+    setSelected(cityIds);
+    setWinnerId(cityIds.length === 1 ? (cityIds[0] ?? "") : "");
+    setConfirming(false);
   }, [view?.shortlist.revision, view?.trip.status]);
+  useEffect(() => {
+    if (confirming) confirmationRef.current?.focus();
+  }, [confirming]);
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   return (
@@ -939,15 +978,22 @@ export function ShortlistPage() {
           <button
             key={d.city.id}
             className={`shortlist-item ${selected.includes(d.city.id) ? "selected" : ""}`}
-            onClick={() =>
-              setSelected((current) =>
-                current.includes(d.city.id)
-                  ? current.filter((id) => id !== d.city.id)
-                  : current.length < 3
-                    ? [...current, d.city.id]
-                    : current,
-              )
-            }
+            aria-pressed={selected.includes(d.city.id)}
+            onClick={() => {
+              setConfirming(false);
+              setSelectionError("");
+              setSelected((current) => {
+                if (current.includes(d.city.id)) {
+                  if (winnerId === d.city.id) setWinnerId("");
+                  return current.filter((cityId) => cityId !== d.city.id);
+                }
+                if (current.length >= 3) {
+                  setSelectionError("Можно оставить не больше трёх городов");
+                  return current;
+                }
+                return [...current, d.city.id];
+              });
+            }}
           >
             <span>#{d.rank}</span>
             <strong>{d.city.name}</strong>
@@ -955,6 +1001,9 @@ export function ShortlistPage() {
             <i>{selected.includes(d.city.id) ? "✓" : "＋"}</i>
           </button>
         ))}
+        <p className="selection-feedback" aria-live="polite">
+          {selectionError || `${selected.length} из 3 выбрано`}
+        </p>
         {selected[0] &&
           (() => {
             const item = view.destinations.find(
@@ -974,11 +1023,11 @@ export function ShortlistPage() {
               >
                 {(
                   [
-                    ["love", "♥"],
-                    ["ok", "≈"],
-                    ["dislike", "👎"],
+                    ["love", "Нравится"],
+                    ["ok", "Нормально"],
+                    ["dislike", "Не подходит"],
                   ] as const
-                ).map(([value, icon]) => (
+                ).map(([value, label]) => (
                   <button
                     key={value}
                     className={counts.mine === value ? "selected" : ""}
@@ -987,7 +1036,7 @@ export function ShortlistPage() {
                       reaction.mutate({ cityId: item.city.id, value })
                     }
                   >
-                    {icon} {counts[value]}
+                    {label} · {counts[value]}
                   </button>
                 ))}
               </div>
@@ -999,27 +1048,70 @@ export function ShortlistPage() {
             disabled={!selected.length || shortlist.isPending}
             onClick={() => shortlist.mutate(selected)}
           >
-            {shortlist.isPending ? "Сохраняем…" : "Сохранить shortlist"}
+            {shortlist.isPending ? "Сохраняем…" : "Сохранить общий выбор"}
           </button>
         )}
         {"capabilities" in view &&
           view.capabilities.canFinalize &&
-          selected[0] && (
-            <button
-              className="primary-button"
-              disabled={finalize.isPending}
-              onClick={() => {
-                const resultId = view.destinations.find(
-                  ({ city }) => city.id === selected[0],
-                )?.resultId;
-                if (resultId)
-                  finalize.mutate(resultId, {
-                    onSuccess: () => location.assign(`/trips/${id}/final`),
-                  });
-              }}
-            >
-              Зафиксировать город
-            </button>
+          selected.length > 0 && (
+            <section className="winner-section">
+              <fieldset>
+                <legend>Какой город станет итогом?</legend>
+                <p>Выберите один город из общего списка.</p>
+                {selected.map((cityId) => {
+                  const city = view.destinations.find(
+                    (destination) => destination.city.id === cityId,
+                  )?.city;
+                  if (!city) return null;
+                  return (
+                    <label key={cityId}>
+                      <input
+                        type="radio"
+                        name="winner"
+                        value={cityId}
+                        checked={winnerId === cityId}
+                        onChange={() => {
+                          setWinnerId(cityId);
+                          setConfirming(false);
+                        }}
+                      />
+                      {city.name}
+                    </label>
+                  );
+                })}
+              </fieldset>
+              {!confirming ? (
+                <button
+                  className="primary-button"
+                  disabled={!winnerId}
+                  onClick={() => setConfirming(true)}
+                >
+                  Проверить итоговый выбор
+                </button>
+              ) : (
+                <FinalizationConfirmation
+                  confirmationRef={confirmationRef}
+                  cityName={
+                    view.destinations.find(
+                      (destination) => destination.city.id === winnerId,
+                    )?.city.name ?? ""
+                  }
+                  pending={finalize.isPending}
+                  error={finalize.isError}
+                  onCancel={() => setConfirming(false)}
+                  onConfirm={() => {
+                    const resultId = view.destinations.find(
+                      ({ city }) => city.id === winnerId,
+                    )?.resultId;
+                    if (resultId)
+                      finalize.mutate(resultId, {
+                        onSuccess: () =>
+                          window.location.assign(`/trips/${id}/final`),
+                      });
+                  }}
+                />
+              )}
+            </section>
           )}
       </main>
     </AppFrame>
@@ -1033,7 +1125,7 @@ export function FinalTripPage() {
   if (error || !final) return <LoadFailed />;
   const route = final.myRoute;
   return (
-    <AppFrame title="Итог поездки" tripId={id}>
+    <AppFrame title="Итог поездки" tripId={id} hideTripNav>
       <main className="final-page">
         <p className="eyebrow">Решено</p>
         <div className="final-check">✓</div>
@@ -1107,7 +1199,8 @@ export function FinalTripPage() {
               <div>
                 <strong>{final.hotel.name}</strong>
                 <small>
-                  {final.hotel.checkIn} — {final.hotel.checkOut}
+                  {formatDay(final.hotel.checkIn)} —{" "}
+                  {formatDay(final.hotel.checkOut)}
                 </small>
               </div>
               <span>★ {final.hotel.rating ?? "—"}</span>
@@ -1219,7 +1312,77 @@ function LoadFailed() {
     <div className="loading-page" role="alert">
       <span>!</span>
       <p>Не удалось загрузить поездку. Попробуйте ещё раз</p>
+      <button className="secondary-button" onClick={() => location.reload()}>
+        Загрузить снова
+      </button>
     </div>
+  );
+}
+
+function FinalizationConfirmation({
+  confirmationRef,
+  cityName,
+  pending,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  confirmationRef: Ref<HTMLElement>;
+  cityName: string;
+  pending: boolean;
+  error: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <section
+      className="finalization-confirmation"
+      ref={confirmationRef}
+      tabIndex={-1}
+      aria-labelledby="finalization-title"
+    >
+      <h2 id="finalization-title">Зафиксировать {cityName}?</h2>
+      <p>Поездка перейдёт к итогам для всей группы.</p>
+      {error && (
+        <p className="form-error" role="alert">
+          Не удалось зафиксировать город. Проверьте соединение и попробуйте ещё
+          раз.
+        </p>
+      )}
+      <div>
+        <button className="secondary-button" onClick={onCancel}>
+          Вернуться к выбору
+        </button>
+        <button
+          className="primary-button"
+          disabled={pending}
+          onClick={onConfirm}
+        >
+          {pending ? "Фиксируем…" : `Зафиксировать ${cityName}`}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function formatRouteCostRange(
+  routes: TripView["destinations"][number]["routes"],
+): string {
+  const firstRoute = routes[0];
+  if (!firstRoute) return "—";
+  const amounts = routes.map((route) => route.estimatedCost.amount);
+  const currency = firstRoute.estimatedCost.currency;
+  const minimum = Math.min(...amounts);
+  const maximum = Math.max(...amounts);
+  const formattedMinimum = formatMoney({ amount: minimum, currency });
+  return minimum === maximum
+    ? formattedMinimum
+    : `${formattedMinimum} – ${formatMoney({ amount: maximum, currency })}`;
+}
+
+function scoringConfigEquals(a: ScoringConfig, b: ScoringConfig): boolean {
+  return (Object.keys(a) as Array<keyof ScoringConfig>).every(
+    (key) => a[key] === b[key],
   );
 }
 function useTripId() {

@@ -8,6 +8,7 @@ import { AppProviders } from "../app/providers.js";
 import { DEMO_TRIP_IDS, FixtureRendezvousApi } from "../demo/fixtures.js";
 import {
   FinalTripPage,
+  ComparePage,
   DestinationPage,
   InvitePage,
   LiveRoomPage,
@@ -95,6 +96,9 @@ describe("core trip pages", () => {
     expect(screen.getAllByText("Казань").length).toBeGreaterThan(0);
     expect(screen.getByText("Твой маршрут")).toBeTruthy();
     expect(screen.getByText("Где остановиться")).toBeTruthy();
+    expect(
+      screen.queryByRole("navigation", { name: "Навигация по поездке" }),
+    ).toBeNull();
   });
 
   it("persists reactions and shortlist choices", async () => {
@@ -106,14 +110,33 @@ describe("core trip pages", () => {
     );
     await screen.findByText("Что оставим?");
     await user.click(document.querySelector(".shortlist-item")!);
-    await user.click(screen.getByRole("button", { name: "♥ 1" }));
-    expect(await screen.findByRole("button", { name: "♥ 2" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Нравится · 1" }));
+    expect(
+      await screen.findByRole("button", { name: "Нравится · 2" }),
+    ).toBeTruthy();
     await user.click(
-      screen.getByRole("button", { name: "Сохранить shortlist" }),
+      screen.getByRole("button", { name: "Сохранить общий выбор" }),
     );
     expect(
-      await screen.findByRole("button", { name: "Зафиксировать город" }),
+      await screen.findByRole("button", { name: "Проверить итоговый выбор" }),
     ).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: "Проверить итоговый выбор" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Зафиксировать Казань" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/перейдёт к итогам для всей группы/)).toBeTruthy();
+  });
+
+  it("labels comparison costs as a per-person range", async () => {
+    const id = DEMO_TRIP_IDS.live;
+    renderPage(
+      `/trips/${id}/compare`,
+      <Route path="/trips/:tripId/compare" element={<ComparePage />} />,
+    );
+    expect(await screen.findByText("Дорога на человека")).toBeTruthy();
+    expect(screen.getAllByText(/₽.*–.*₽/).length).toBeGreaterThan(0);
   });
 
   it("shows a facts-first explanation on a destination", async () => {
@@ -129,6 +152,7 @@ describe("core trip pages", () => {
     expect(await screen.findByText("Почему так")).toBeTruthy();
     expect(await screen.findByText(/даёт группе хороший баланс/)).toBeTruthy();
     expect(screen.getByText(/без AI/)).toBeTruthy();
+    expect(screen.getAllByRole("progressbar").length).toBe(5);
   });
 });
 

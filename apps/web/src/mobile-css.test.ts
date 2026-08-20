@@ -10,6 +10,7 @@ describe("mobile CSS contract", () => {
     expect(css).toContain("@media (max-width: 359px)");
     expect(css).toContain("env(safe-area-inset-bottom)");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(css).toContain("animation-duration: 0.01ms !important");
+    expect(css).toContain(".compute-banner--running .compute-banner__pulse");
+    expect(css).toContain("animation: none");
   });
 });

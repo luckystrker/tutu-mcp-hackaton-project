@@ -22,8 +22,15 @@ export function ScoreBreakdown({
       {(Object.keys(labels) as Array<keyof Scores>).map((key) => (
         <div className="score-row" key={key}>
           <span>{labels[key]}</span>
-          <div className="score-track">
-            <i style={{ width: `${scores[key]}%` }} />
+          <div
+            className="score-track"
+            role="progressbar"
+            aria-label={labels[key]}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(scores[key])}
+          >
+            <i aria-hidden="true" style={{ width: `${scores[key]}%` }} />
           </div>
           <strong>{Math.round(scores[key])}</strong>
         </div>

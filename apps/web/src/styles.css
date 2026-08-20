@@ -4,7 +4,7 @@
   background: #f4f0e7;
   font-family: Manrope, system-ui, sans-serif;
   --ink: #24241f;
-  --muted: #777367;
+  --muted: #68645b;
   --paper: var(--tg-theme-bg-color, #f4f0e7);
   --card: var(--tg-theme-secondary-bg-color, #fffdf8);
   --lime: #d9f96d;
@@ -14,6 +14,10 @@
 }
 * {
   box-sizing: border-box;
+}
+::selection {
+  background: var(--lime);
+  color: var(--ink);
 }
 html {
   width: 100%;
@@ -43,6 +47,7 @@ button,
 input,
 select {
   font: inherit;
+  caret-color: var(--forest);
 }
 button,
 input,
@@ -69,8 +74,13 @@ a {
   min-height: 100dvh;
   margin: auto;
   padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right))
-    calc(84px + env(safe-area-inset-bottom))
+    calc(28px + env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
+}
+.app-frame--with-nav {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
 }
 .topbar {
   position: sticky;
@@ -305,6 +315,7 @@ select {
 }
 .primary-button:disabled {
   opacity: 0.55;
+  cursor: not-allowed;
 }
 .secondary-button {
   background: white;
@@ -400,6 +411,44 @@ select {
   font: 500 11px Manrope;
   color: var(--muted);
 }
+.optional-preferences {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.optional-preferences summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink);
+  cursor: pointer;
+  font: 600 20px "Playfair Display";
+}
+.optional-preferences summary small {
+  font: 600 12px Manrope;
+  color: var(--muted);
+}
+.optional-preferences fieldset {
+  padding-top: 14px;
+}
+.field-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .checks {
   display: flex;
   flex-wrap: wrap;
@@ -427,6 +476,21 @@ select {
 }
 .trip-heading > div {
   min-width: 0;
+}
+.edit-conditions-link {
+  min-height: 44px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--forest);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
 }
 .trip-heading h1 {
   font: 600 clamp(25px, 8vw, 34px) Manrope;
@@ -466,7 +530,7 @@ select {
 }
 .participant-strip small {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 5px;
 }
 .compute-banner {
@@ -517,6 +581,7 @@ select {
       transparent 25% 47%
     );
   border-radius: 28px;
+  overflow: hidden;
 }
 .spokes__city {
   position: absolute;
@@ -533,7 +598,7 @@ select {
   box-shadow: 0 10px 30px #31584647;
 }
 .spokes__city small {
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   opacity: 0.7;
@@ -546,7 +611,15 @@ select {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 9px;
+  max-width: 42%;
+  min-width: 0;
+  font-size: 12px;
+}
+.spokes__person small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .spokes__person span {
   display: grid;
@@ -583,13 +656,13 @@ select {
   margin: 0;
 }
 .ranking-head > span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .checked-at {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .city-carousel {
   display: flex;
@@ -601,13 +674,15 @@ select {
   margin: 14px max(-16px, calc(env(safe-area-inset-left) * -1)) 0;
   padding: 3px 16px 20px;
   scroll-padding-inline: 16px;
+  max-width: calc(100% + 32px);
 }
 .city-carousel::-webkit-scrollbar {
   display: none;
 }
 .card-button {
   display: block;
-  flex: 0 0 min(calc(100vw - 48px), 360px);
+  flex: 0 0 min(calc(100% - 32px), 360px);
+  min-width: 0;
   padding: 0;
   border: 0;
   background: none;
@@ -650,7 +725,7 @@ select {
   margin: 22px 0;
 }
 .city-card__head p {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin: 0;
 }
@@ -665,12 +740,12 @@ select {
   color: var(--forest);
 }
 .city-card__head > strong small {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .city-card__head > strong .score-before {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 .city-card__head > strong i {
@@ -692,7 +767,7 @@ select {
   border-block: 1px solid var(--line);
   padding: 13px 0;
   margin-bottom: 16px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .city-card__facts b {
@@ -702,7 +777,11 @@ select {
   margin-top: 3px;
 }
 .text-link {
-  font-size: 12px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
   font-weight: 700;
   text-decoration: none;
   flex: 1;
@@ -720,9 +799,9 @@ select {
   border-radius: 999px;
   background: var(--lime);
   min-width: 64px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 8px 10px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 .degraded-label {
@@ -753,7 +832,12 @@ select {
   min-height: 44px;
   white-space: nowrap;
   padding: 9px 12px;
-  font-size: 10px;
+  font-size: 12px;
+}
+.preset-row button[aria-pressed="true"] {
+  border-color: var(--forest);
+  background: var(--lime);
+  color: var(--ink);
 }
 .scoring-panel label {
   display: grid;
@@ -839,13 +923,14 @@ select {
   background: var(--card);
   padding: 18px;
   border-radius: 20px;
+  min-width: 0;
 }
 .score-row {
   display: grid;
   grid-template-columns: minmax(82px, 34%) 1fr 25px;
   gap: 8px;
   align-items: center;
-  font-size: 10px;
+  font-size: 12px;
 }
 .score-track {
   height: 6px;
@@ -918,8 +1003,8 @@ select {
 }
 .compare-row {
   display: grid;
-  grid-template-columns: 110px repeat(3, minmax(110px, 1fr));
-  min-width: 440px;
+  grid-template-columns: 132px repeat(3, minmax(120px, 1fr));
+  min-width: 492px;
   border-bottom: 1px solid var(--line);
 }
 .compare-row > * {
@@ -965,6 +1050,70 @@ select {
 .shortlist-item.selected i {
   background: var(--lime);
 }
+.selection-feedback {
+  min-height: 20px;
+  margin: 6px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.winner-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.winner-section fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.winner-section legend {
+  font: 600 22px "Playfair Display";
+}
+.winner-section fieldset > p {
+  margin: 4px 0 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.winner-section label {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  font-weight: 700;
+}
+.winner-section input {
+  width: 20px;
+  min-height: 20px;
+  accent-color: var(--forest);
+}
+.finalization-confirmation {
+  padding: 18px;
+  border-radius: 16px;
+  background: #e5eee7;
+  color: var(--forest);
+  text-align: left;
+}
+.finalization-confirmation h2 {
+  margin-bottom: 8px;
+  font-size: 24px;
+}
+.finalization-confirmation > p {
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+.finalization-confirmation > div {
+  display: grid;
+  gap: 8px;
+}
 .reaction-row {
   display: flex;
   flex-wrap: wrap;
@@ -1007,6 +1156,10 @@ select {
   border-radius: 16px;
   background: var(--card);
 }
+.hotel-options article > *,
+.personal-route > * {
+  min-width: 0;
+}
 .hotel-options article div,
 .hotel-options article small,
 .personal-route span {
@@ -1016,7 +1169,7 @@ select {
 .personal-route span,
 .muted-note {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .hotel-options article b,
 .personal-route b {
@@ -1025,6 +1178,9 @@ select {
 .personal-route .eyebrow,
 .personal-route span {
   grid-column: 1 / -1;
+}
+.personal-route span {
+  overflow-wrap: anywhere;
 }
 .personal-route .secondary-button {
   grid-column: 1 / -1;
@@ -1037,6 +1193,8 @@ select {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  min-width: 0;
+  max-width: 100%;
 }
 .final-check {
   width: 52px;
@@ -1063,11 +1221,15 @@ select {
   gap: 10px;
   padding: 16px;
   margin-bottom: 28px;
+  min-width: 0;
+}
+.final-ticket > * {
+  min-width: 0;
 }
 .final-ticket small,
 .final-ticket span {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .final-ticket strong {
@@ -1080,12 +1242,10 @@ select {
   margin-bottom: 18px;
 }
 .bottom-nav {
-  position: fixed;
+  position: sticky;
   z-index: 5;
   bottom: max(8px, env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(calc(100% - 20px), 520px);
+  width: min(100%, 520px);
   display: flex;
   justify-content: stretch;
   background: #24241ff0;
@@ -1093,6 +1253,7 @@ select {
   padding: 8px;
   border-radius: 18px;
   box-shadow: 0 12px 30px #0003;
+  margin: 28px auto 0;
 }
 .bottom-nav a {
   color: #aaa79e;
@@ -1115,6 +1276,10 @@ select {
 .bottom-nav a.active {
   background: var(--lime);
   color: var(--ink);
+}
+.live-page {
+  min-width: 0;
+  max-width: 100%;
 }
 .trips-page,
 .trip-menu-page,
@@ -1346,6 +1511,9 @@ select {
   animation: spin 0.8s linear infinite;
   margin: auto;
 }
+.loading-page .secondary-button {
+  margin-top: 14px;
+}
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1372,7 +1540,7 @@ select {
     padding-inline: 12px;
   }
   .card-button {
-    flex-basis: calc(100vw - 32px);
+    flex-basis: calc(100% - 20px);
   }
   .city-card__actions {
     align-items: stretch;
@@ -1414,6 +1582,12 @@ select {
     width: min(100%, 760px);
     padding-inline: 28px;
   }
+  .app-frame--with-nav {
+    padding-bottom: 28px;
+  }
+  .bottom-nav {
+    bottom: 16px;
+  }
   .city-carousel {
     margin-inline: 0;
     padding-inline: 0;
@@ -1429,11 +1603,15 @@ select {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  html {
     scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+  }
+  .compute-banner--running .compute-banner__pulse,
+  .loading-page span,
+  .score-change {
+    animation: none;
+  }
+  .city-card {
+    transition: none;
   }
 }

@@ -6,16 +6,19 @@ export function AppFrame({
   title,
   back = false,
   tripId,
+  hideTripNav = false,
 }: {
   children: ReactNode;
   title?: string;
   back?: boolean;
   tripId?: string;
+  hideTripNav?: boolean;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const showTripNav = Boolean(tripId && !hideTripNav);
   return (
-    <div className="app-frame">
+    <div className={`app-frame ${showTripNav ? "app-frame--with-nav" : ""}`}>
       <header className="topbar">
         <div className="topbar__side topbar__side--left">
           {back ? (
@@ -52,26 +55,37 @@ export function AppFrame({
         </div>
       </header>
       {children}
-      {tripId && (
+      {showTripNav && tripId && (
         <nav className="bottom-nav" aria-label="Навигация по поездке">
-          <TripNavLink tripId={tripId} path="live" current={location.pathname}>
+          <TripNavLink
+            tripId={tripId}
+            path="live"
+            active={
+              location.pathname.endsWith("/live") ||
+              location.pathname.includes("/cities/")
+            }
+          >
             <span aria-hidden="true">◎</span>Обзор
           </TripNavLink>
           <TripNavLink
             tripId={tripId}
             path="compare"
-            current={location.pathname}
+            active={location.pathname.endsWith("/compare")}
           >
             <span aria-hidden="true">⇄</span>Сравнить
           </TripNavLink>
           <TripNavLink
             tripId={tripId}
             path="shortlist"
-            current={location.pathname}
+            active={location.pathname.endsWith("/shortlist")}
           >
             <span aria-hidden="true">♡</span>Выбор
           </TripNavLink>
-          <TripNavLink tripId={tripId} path="menu" current={location.pathname}>
+          <TripNavLink
+            tripId={tripId}
+            path="menu"
+            active={location.pathname.endsWith("/menu")}
+          >
             <span aria-hidden="true">☰</span>Ещё
           </TripNavLink>
         </nav>
@@ -83,18 +97,19 @@ export function AppFrame({
 function TripNavLink({
   tripId,
   path,
-  current,
+  active,
   children,
 }: {
   tripId: string;
   path: string;
-  current: string;
+  active: boolean;
   children: ReactNode;
 }) {
   return (
     <Link
-      className={current.endsWith(`/${path}`) ? "active" : ""}
+      className={active ? "active" : ""}
       to={`/trips/${tripId}/${path}`}
+      aria-current={active ? "page" : undefined}
     >
       {children}
     </Link>
