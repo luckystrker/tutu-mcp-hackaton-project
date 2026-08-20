@@ -16,6 +16,7 @@ import {
 import {
   useEffect,
   lazy,
+  useMemo,
   useRef,
   useState,
   Suspense,
@@ -48,9 +49,13 @@ import { parseNaturalPreference } from "../features/trips/natural-preference.js"
 import { useRankingViewState } from "../features/ranking/model.js";
 import type { TripView } from "../features/trips/api.js";
 import { DEMO_TRIP_IDS } from "../demo/ids.js";
+import { DateField } from "../components/DateField.js";
+import { detectCountryCode, guessCountryCode } from "../lib/country.js";
+import { nextDaysOff } from "../lib/default-dates.js";
+import { randomTripTitle } from "../lib/trip-titles.js";
 import {
+  formatDate,
   formatDateTime,
-  formatDay,
   formatDuration,
   formatMoney,
   formatTime,
@@ -128,8 +133,24 @@ export function CreateTripPage() {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [title] = useState(() => randomTripTitle(new Date()));
+  const [country, setCountry] = useState(() => guessCountryCode());
+  const period = useMemo(() => nextDaysOff(new Date(), country), [country]);
+  useEffect(() => {
+    let active = true;
+    void detectCountryCode().then((detected) => {
+      if (active)
+        setCountry((current) => (detected === current ? current : detected));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (event.currentTarget.querySelector('input[aria-invalid="true"]')) {
+      return setError("Проверьте даты: формат дд.мм.гггг");
+    }
     const data = new FormData(event.currentTarget);
     const parsed = CreateTripInputSchema.safeParse({
       title: data.get("title"),
@@ -166,16 +187,26 @@ export function CreateTripPage() {
         <form className="create-card" onSubmit={submit}>
           <label>
             Название поездки
-            <input name="title" defaultValue="Сентябрьский побег" />
+            <input name="title" defaultValue={title} />
           </label>
           <div className="form-grid">
             <label>
-              Примерно с <small>необязательно</small>
-              <input name="from" type="datetime-local" />
+              Примерно с <small>ближайшие выходные</small>
+              <DateField
+                key={`from-${country}`}
+                name="from"
+                defaultValue={period.from.toISOString()}
+                defaultTime="18:00"
+              />
             </label>
             <label>
-              Примерно до <small>необязательно</small>
-              <input name="to" type="datetime-local" />
+              Примерно до <small>ближайшие выходные</small>
+              <DateField
+                key={`to-${country}`}
+                name="to"
+                defaultValue={period.to.toISOString()}
+                defaultTime="21:00"
+              />
             </label>
           </div>
           <fieldset className="choice-fieldset">
@@ -214,21 +245,21 @@ export function CreateTripPage() {
                   value="train"
                   defaultChecked
                 />
-                Поезд
+                <span>Поезд</span>
               </label>
               <label>
                 <input type="checkbox" name="preferredTransport" value="air" />
-                Самолёт
+                <span>Самолёт</span>
               </label>
               <label>
                 <input type="checkbox" name="preferredTransport" value="bus" />
-                Автобус
+                <span>Автобус</span>
               </label>
             </div>
           </fieldset>
           <label className="toggle-row">
             <input type="checkbox" name="allowInternational" />
-            Можно искать встречу за границей
+            <span>Можно искать встречу за границей</span>
           </label>
           {error && <p className="form-error">{error}</p>}
           <button className="primary-button" disabled={busy}>
@@ -427,7 +458,7 @@ function TripListItem({ trip }: { trip: TripPublic }) {
       <div>
         <strong>{trip.title}</strong>
         <small>
-          {statusLabel(trip.status)} · обновлено {formatDay(trip.updatedAt)}
+          {statusLabel(trip.status)} · обновлено {formatDate(trip.updatedAt)}
         </small>
       </div>
       <i>→</i>
@@ -481,6 +512,9 @@ export function PreferencesPage() {
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [originCityId, setOriginCityId] = useState(MOSCOW_ID);
+  const [weekendPeriod] = useState(() =>
+    nextDaysOff(new Date(), guessCountryCode()),
+  );
   useEffect(() => {
     if (view?.me.originCityId) setOriginCityId(view.me.originCityId);
   }, [view?.me.originCityId]);
@@ -488,6 +522,9 @@ export function PreferencesPage() {
   if (loadError || !view) return <LoadFailed />;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (event.currentTarget.querySelector('input[aria-invalid="true"]')) {
+      return setError("Проверьте даты: формат дд.мм.гггг");
+    }
     const data = new FormData(event.currentTarget);
     const natural = parseNaturalPreference(
       String(data.get("naturalPreference") ?? ""),
@@ -566,22 +603,26 @@ export function PreferencesPage() {
             <div className="form-grid">
               <label>
                 Могу выехать
-                <input
+                <DateField
                   name="from"
-                  type="datetime-local"
-                  defaultValue={toDateTimeLocal(
-                    view.me.availableFrom ?? view.trip.periodFrom,
-                  )}
+                  defaultValue={
+                    view.me.availableFrom ??
+                    view.trip.periodFrom ??
+                    weekendPeriod.from.toISOString()
+                  }
+                  defaultTime="18:00"
                 />
               </label>
               <label>
                 Вернуться до
-                <input
+                <DateField
                   name="to"
-                  type="datetime-local"
-                  defaultValue={toDateTimeLocal(
-                    view.me.mustReturnBy ?? view.trip.periodTo,
-                  )}
+                  defaultValue={
+                    view.me.mustReturnBy ??
+                    view.trip.periodTo ??
+                    weekendPeriod.to.toISOString()
+                  }
+                  defaultTime="21:00"
                 />
               </label>
             </div>
@@ -596,16 +637,16 @@ export function PreferencesPage() {
             </label>
             <div className="checks">
               <label>
-                <input type="checkbox" name="forbidden" value="train" /> Без
-                поездов
+                <input type="checkbox" name="forbidden" value="train" />
+                <span>Без поездов</span>
               </label>
               <label>
-                <input type="checkbox" name="forbidden" value="air" /> Без
-                самолётов
+                <input type="checkbox" name="forbidden" value="air" />
+                <span>Без самолётов</span>
               </label>
               <label>
-                <input type="checkbox" name="forbidden" value="bus" /> Без
-                автобусов
+                <input type="checkbox" name="forbidden" value="bus" />
+                <span>Без автобусов</span>
               </label>
             </div>
           </fieldset>
@@ -653,28 +694,32 @@ export function PreferencesPage() {
               </fieldset>
               <div className="checks">
                 <label>
-                  <input type="checkbox" name="morning" /> Прибытие утром
+                  <input type="checkbox" name="morning" />
+                  <span>Прибытие утром</span>
                 </label>
                 <label>
                   <input type="checkbox" name="tags" value="history" />
-                  История
+                  <span>История</span>
                 </label>
                 <label>
-                  <input type="checkbox" name="tags" value="food" /> Еда
+                  <input type="checkbox" name="tags" value="food" />
+                  <span>Еда</span>
                 </label>
                 <label>
-                  <input type="checkbox" name="tags" value="quiet" /> Спокойно
+                  <input type="checkbox" name="tags" value="quiet" />
+                  <span>Спокойно</span>
                 </label>
                 <label>
-                  <input type="checkbox" name="tags" value="nature" /> Природа
+                  <input type="checkbox" name="tags" value="nature" />
+                  <span>Природа</span>
                 </label>
                 <label>
-                  <input type="checkbox" name="tags" value="small-city" /> Малый
-                  город
+                  <input type="checkbox" name="tags" value="small-city" />
+                  <span>Малый город</span>
                 </label>
                 <label>
-                  <input type="checkbox" name="tags" value="nightlife" />{" "}
-                  Вечерняя жизнь
+                  <input type="checkbox" name="tags" value="nightlife" />
+                  <span>Вечерняя жизнь</span>
                 </label>
               </div>
               <label>
@@ -1389,13 +1434,13 @@ export function FinalTripPage() {
           <div className="final-ticket">
             <div>
               <small>Туда</small>
-              <strong>{formatDay(route.outboundDepartureAt)}</strong>
+              <strong>{formatDate(route.outboundDepartureAt)}</strong>
               <span>{formatTime(route.outboundDepartureAt)}</span>
             </div>
             <i>→</i>
             <div>
               <small>Обратно</small>
-              <strong>{formatDay(route.returnDepartureAt)}</strong>
+              <strong>{formatDate(route.returnDepartureAt)}</strong>
               <span>{formatTime(route.returnDepartureAt)}</span>
             </div>
           </div>
@@ -1450,8 +1495,8 @@ export function FinalTripPage() {
               <div>
                 <strong>{final.hotel.name}</strong>
                 <small>
-                  {formatDay(final.hotel.checkIn)} —{" "}
-                  {formatDay(final.hotel.checkOut)}
+                  {formatDate(final.hotel.checkIn)} —{" "}
+                  {formatDate(final.hotel.checkOut)}
                 </small>
               </div>
               <span>★ {final.hotel.rating ?? "—"}</span>
@@ -1507,7 +1552,7 @@ function HotelOptions({
           <div>
             <strong>{hotel.name}</strong>
             <small>
-              {hotel.checkIn} — {hotel.checkOut}
+              {formatDate(hotel.checkIn)} — {formatDate(hotel.checkOut)}
             </small>
           </div>
           <span>★ {hotel.rating ?? "—"}</span>
@@ -1650,14 +1695,6 @@ function safeIso(value: FormDataEntryValue | null): string {
 function optionalIso(value: FormDataEntryValue | null): string | null {
   const raw = String(value ?? "").trim();
   return raw ? safeIso(raw) || null : null;
-}
-
-function toDateTimeLocal(value: string | null): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return "";
-  const local = new Date(date.valueOf() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
 }
 
 function statusLabel(status: TripPublic["status"]): string {

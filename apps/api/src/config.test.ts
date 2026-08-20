@@ -53,6 +53,34 @@ describe("application config", () => {
     expect(() => loadConfig({ ...required, NODE_ENV: "production" })).toThrow();
   });
 
+  it("parses demo bots flags from environment strings", () => {
+    expect(loadConfig({ ...required }).DEMO_BOTS).toBe(false);
+    expect(loadConfig({ ...required, DEMO_BOTS: "false" }).DEMO_BOTS).toBe(
+      false,
+    );
+    expect(loadConfig({ ...required, DEMO_BOTS: "true" }).DEMO_BOTS).toBe(true);
+    expect(
+      loadConfig({
+        ...required,
+        DEMO_BOTS: "true",
+        DEMO_BOTS_INTERVAL_MS: "5000",
+      }).DEMO_BOTS_INTERVAL_MS,
+    ).toBe(5000);
+  });
+
+  it("forbids demo bots in production", () => {
+    expect(() =>
+      loadConfig({
+        ...required,
+        NODE_ENV: "production",
+        TELEGRAM_BOT_TOKEN: "token",
+        TELEGRAM_BOT_USERNAME: "bot",
+        TELEGRAM_MINI_APP_SHORT_NAME: "app",
+        DEMO_BOTS: "true",
+      }),
+    ).toThrow(/Demo bots/);
+  });
+
   it("disables an incomplete optional LLM without blocking startup", () => {
     const resolved = resolveLlmConfig(
       loadConfig({

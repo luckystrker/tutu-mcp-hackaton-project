@@ -22,7 +22,7 @@
 html {
   width: 100%;
   min-width: 320px;
-  overflow-x: hidden;
+  overflow-x: clip;
   -webkit-text-size-adjust: 100%;
 }
 body {
@@ -30,7 +30,7 @@ body {
   min-width: 320px;
   width: 100%;
   min-height: 100dvh;
-  overflow-x: hidden;
+  overflow-x: clip;
   background:
     radial-gradient(
       circle at 85% 5%,
@@ -94,8 +94,7 @@ a {
   grid-template-columns: 48px minmax(0, 1fr) 48px;
   align-items: center;
   gap: 6px;
-  background: color-mix(in srgb, var(--paper) 88%, transparent);
-  backdrop-filter: blur(12px);
+  background: var(--paper);
 }
 .topbar__side {
   min-width: 44px;
@@ -338,10 +337,29 @@ h2 {
   align-items: center;
   gap: 10px !important;
   color: var(--ink) !important;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8f5ee;
+  cursor: pointer;
 }
 .toggle-row input {
-  width: 20px;
-  min-height: 20px;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+  pointer-events: none;
+}
+.toggle-row:has(input:checked) {
+  border-color: var(--forest);
+  background: var(--lime);
+}
+.toggle-row input:focus-visible + span {
+  outline: 3px solid rgba(49, 88, 70, 0.32);
+  outline-offset: 2px;
 }
 input,
 select {
@@ -692,15 +710,46 @@ select {
 .checks label {
   display: flex;
   align-items: center;
-  gap: 6px;
   min-height: 44px;
-  padding: 10px 12px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: #f8f5ee;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+.checks label:has(input:checked) {
+  border-color: var(--forest);
+  background: var(--lime);
+}
+.checks span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.checks label:has(input:checked) span {
+  color: var(--ink);
 }
 .checks input {
-  width: auto;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+  pointer-events: none;
+}
+.checks input:focus-visible + span {
+  outline: 3px solid rgba(49, 88, 70, 0.32);
+  outline-offset: 2px;
 }
 .preference-scale {
   display: grid !important;
@@ -1136,8 +1185,10 @@ select {
 .preset-row {
   display: flex;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   gap: 6px;
-  margin: 14px 0;
+  margin: 16px 0;
+  padding-block: 4px;
 }
 .preset-row button,
 .reaction-row button {
@@ -1632,6 +1683,7 @@ select {
 .bottom-nav a.active {
   background: var(--lime);
   color: var(--ink);
+  border-radius: 14px;
 }
 .live-page {
   min-width: 0;

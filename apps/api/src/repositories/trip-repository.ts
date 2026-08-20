@@ -1155,6 +1155,111 @@ export class TripRepository {
     return result.rowCount ?? 0;
   }
 
+  async addParticipant(actor: Actor, tripId: string): Promise<void> {
+    await this.database.transaction(async (client) => {
+      await ensureUser(client, actor);
+      const trip = await lockedTrip(client, tripId);
+      if (trip.status === "FINALIZED" || trip.status === "CANCELLED")
+        throw new ApplicationError("TRIP_CLOSED", 409, "Trip is closed");
+      const count = await client.query<{ count: string }>(
+        `SELECT count(*) FROM rendezvous.participants WHERE trip_id=$1`,
+        [tripId],
+      );
+      const existing = await client.query(
+        `SELECT 1 FROM rendezvous.participants WHERE trip_id=$1 AND user_id=$2`,
+        [tripId, actor.userId],
+      );
+      if (existing.rowCount) return;
+      if (Number(count.rows[0]!.count) >= trip.expected_participants)
+        throw new ApplicationError("TRIP_FULL", 409, "Trip is full");
+      const participantId = randomUUID();
+      await client.query(
+        `INSERT INTO rendezvous.participants(id,trip_id,user_id) VALUES($1,$2,$3)`,
+        [participantId, tripId, actor.userId],
+      );
+      await insertEvent(client, tripId, trip.revision, "participant_joined", {
+        participantId,
+      });
+    });
+  }
+
+  async listDemoBotTripCandidates(freshWindowHours = 24): Promise<
+    readonly {
+      tripId: string;
+      expectedParticipants: number;
+      participants: number;
+      readyCount: number;
+      periodFrom: Date | null;
+      periodTo: Date | null;
+      hasDestinations: boolean;
+    }[]
+  > {
+    const result = await this.database.query<{
+      trip_id: string;
+      expected_participants: number;
+      participants: string;
+      ready_count: string;
+      period_from: Date | null;
+      period_to: Date | null;
+      has_destinations: boolean;
+    }>(
+      `SELECT t.id AS trip_id,t.expected_participants,
+          (SELECT count(*) FROM rendezvous.participants p WHERE p.trip_id=t.id) AS participants,
+          (SELECT count(*) FROM rendezvous.participants p WHERE p.trip_id=t.id AND p.ready) AS ready_count,
+          t.period_from,t.period_to,
+          EXISTS(
+            SELECT 1 FROM rendezvous.destination_results d
+            JOIN rendezvous.trip_results r ON r.id=d.trip_result_id
+            WHERE r.trip_id=t.id AND r.revision=t.revision
+          ) AS has_destinations
+       FROM rendezvous.trips t
+       WHERE t.status IN ('COLLECTING','LIVE')
+         AND t.compute_status IN ('idle','degraded')
+         AND t.updated_at > now() - ($1::text || ' hours')::interval`,
+      [Math.max(1, Math.floor(freshWindowHours))],
+    );
+    return result.rows.map((row) => ({
+      tripId: row.trip_id,
+      expectedParticipants: row.expected_participants,
+      participants: Number(row.participants),
+      readyCount: Number(row.ready_count),
+      periodFrom: row.period_from,
+      periodTo: row.period_to,
+      hasDestinations: row.has_destinations,
+    }));
+  }
+
+  async latestCityIds(tripId: string): Promise<readonly string[]> {
+    const result = await this.database.query<{ city_id: string }>(
+      `SELECT d.city_id FROM rendezvous.destination_results d
+       WHERE d.trip_result_id=(
+         SELECT r.id FROM rendezvous.trip_results r
+         JOIN rendezvous.trips t ON t.id=r.trip_id
+         WHERE r.trip_id=$1 AND r.revision=t.revision AND r.ranking_version=t.ranking_version
+         ORDER BY r.revision DESC,r.ranking_version DESC LIMIT 1
+       )
+       ORDER BY d.rank LIMIT 3`,
+      [tripId],
+    );
+    return result.rows.map(({ city_id }) => city_id);
+  }
+
+  async listBotUserIdsWithoutReactions(
+    tripId: string,
+  ): Promise<readonly string[]> {
+    const result = await this.database.query<{ user_id: string }>(
+      `SELECT p.user_id FROM rendezvous.participants p
+       JOIN rendezvous.users u ON u.id=p.user_id
+       WHERE p.trip_id=$1 AND u.display_name LIKE 'Бот %'
+         AND NOT EXISTS (
+           SELECT 1 FROM rendezvous.reactions r
+           WHERE r.trip_id=p.trip_id AND r.user_id=p.user_id
+         )`,
+      [tripId],
+    );
+    return result.rows.map(({ user_id }) => user_id);
+  }
+
   private async latestDestinations(
     tripId: string,
     actorId: string,

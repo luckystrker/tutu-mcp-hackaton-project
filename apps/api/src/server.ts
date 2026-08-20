@@ -23,6 +23,7 @@ import { loadConfig, resolveLlmConfig } from "./config.js";
 import { createDatabase } from "./db.js";
 import { createShutdown } from "./lifecycle.js";
 import { buildLoggerOptions } from "./logging.js";
+import { DemoBots } from "./demo/demo-bots.js";
 import { InMemoryCollaborationMetrics } from "./observability/collaboration-metrics.js";
 import {
   ExplanationGenerator,
@@ -168,9 +169,24 @@ const requeued = await repository.requeueOrphanedJobs();
 if (requeued > 0)
   app.log.warn({ requeued }, "requeued orphaned recompute jobs after restart");
 
+const bots =
+  config.DEMO_BOTS && config.NODE_ENV !== "production"
+    ? new DemoBots({
+        repository,
+        intervalMs: config.DEMO_BOTS_INTERVAL_MS,
+        onError: (error) =>
+          app.log.warn({ err: error }, "demo bot tick failed"),
+      })
+    : undefined;
+if (bots)
+  app.log.info(
+    "demo bots enabled: fake participants will auto-join fresh trips",
+  );
+
 const shutdown = createShutdown({
   closeServer: async () => {
     clearInterval(outboxRetentionTimer);
+    bots?.stop();
     await worker.close();
     await workflowPool.end();
     await tutuCaller.close();
@@ -203,3 +219,4 @@ try {
   process.exit(1);
 }
 worker.start();
+bots?.start();

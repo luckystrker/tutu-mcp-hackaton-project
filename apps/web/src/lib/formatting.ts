@@ -16,25 +16,73 @@ export function formatDuration(minutes: number): string {
     : `${hours} ч`;
 }
 
+function pad(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+/** dd.mm.yyyy */
+export function formatDate(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.valueOf())) return "—";
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
+}
+
+/** dd.mm.yyyy hh:mm */
 export function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return "—";
+  return `${formatDate(date)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function formatDay(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "numeric",
-    month: "long",
-  }).format(new Date(value));
+/** hh:mm */
+export function formatTime(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.valueOf())) return "—";
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function formatTime(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+/** dd.mm.yyyy hh:mm for editable date fields */
+export function formatDateInput(value: string | Date, time = "10:00"): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.valueOf())) return "";
+  return `${formatDate(date)} ${time}`;
+}
+
+const DATE_INPUT_PATTERN =
+  /^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2}|\d{4})(?:[ T](\d{1,2}):(\d{2}))?$/;
+
+const MONTH_LENGTHS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/**
+ * Parses dd.mm.yyyy (optionally with hh:mm) as a local date. Falls back to ISO
+ * and locale-formatted strings. Returns null when the value is not a valid
+ * calendar date.
+ */
+export function parseDateInput(
+  value: string,
+  defaultTime = "10:00",
+): Date | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const match = DATE_INPUT_PATTERN.exec(trimmed);
+  if (match) {
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    const fullYear = year < 100 ? 2000 + year : year;
+    const hours = match[4] ? Number(match[4]) : Number(defaultTime.slice(0, 2));
+    const minutes = match[5]
+      ? Number(match[5])
+      : Number(defaultTime.slice(3, 5));
+    const leap =
+      month === 2 &&
+      ((fullYear % 4 === 0 && fullYear % 100 !== 0) || fullYear % 400 === 0);
+    const maxDay = MONTH_LENGTHS[month - 1] ?? (leap ? 29 : 0);
+    if (month < 1 || month > 12 || day < 1 || day > (maxDay ?? 0)) return null;
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    const date = new Date(fullYear, month - 1, day, hours, minutes);
+    return Number.isNaN(date.valueOf()) ? null : date;
+  }
+  const iso = new Date(trimmed);
+  return Number.isNaN(iso.valueOf()) ? null : iso;
 }

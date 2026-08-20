@@ -5,6 +5,11 @@ const OptionalTextSchema = z
   .union([z.string().trim().min(1), EmptyStringToUndefinedSchema])
   .optional();
 
+/** Environment booleans arrive as strings; "false" must stay false. */
+const EnvBooleanSchema = z
+  .union([z.boolean(), z.enum(["true", "false"]).default("false")])
+  .transform((value) => value === true || value === "true");
+
 const TrustProxySchema = OptionalTextSchema.transform((value) => {
   if (value === undefined) return undefined;
   if (value === "true") return true;
@@ -37,6 +42,8 @@ export const AppConfigSchema = z
     LLM_MODEL: OptionalTextSchema,
     LLM_BASE_URL: z.union([z.url(), EmptyStringToUndefinedSchema]).optional(),
     LLM_API_KEY: OptionalTextSchema,
+    DEMO_BOTS: EnvBooleanSchema,
+    DEMO_BOTS_INTERVAL_MS: z.coerce.number().int().min(1_000).default(15_000),
   })
   .superRefine((config, context) => {
     if (config.NODE_ENV === "production" && !config.TELEGRAM_BOT_TOKEN) {
@@ -44,6 +51,13 @@ export const AppConfigSchema = z
         code: "custom",
         path: ["TELEGRAM_BOT_TOKEN"],
         message: "Required in production",
+      });
+    }
+    if (config.NODE_ENV === "production" && config.DEMO_BOTS) {
+      context.addIssue({
+        code: "custom",
+        path: ["DEMO_BOTS"],
+        message: "Demo bots are only allowed outside production",
       });
     }
     if (
