@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   formatDateInput,
   formatTime,
@@ -27,6 +28,7 @@ export function DateField({
   required?: boolean;
   ariaLabel?: string;
 }) {
+  const { t } = useTranslation();
   const [initialText] = useState(() => {
     if (!defaultValue) return "";
     const parsed = parseDateInput(defaultValue);
@@ -47,7 +49,7 @@ export function DateField({
         type="text"
         inputMode="numeric"
         autoComplete="off"
-        placeholder="дд.мм.гггг чч:мм"
+        placeholder={t("date.placeholder")}
         maxLength={16}
         value={text}
         aria-label={ariaLabel}

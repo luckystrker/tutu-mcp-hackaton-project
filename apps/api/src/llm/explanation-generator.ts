@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ExplanationFacts } from "@rendezvous/contracts";
+import type { SupportedLocale } from "@rendezvous/i18n";
 import type { LlmClient } from "./llm-client.js";
 
 const RewriteSchema = z.strictObject({
@@ -51,12 +52,13 @@ export class ExplanationGenerator {
   async generate(
     facts: ExplanationFacts,
     template: string,
+    locale: SupportedLocale = "ru",
   ): Promise<ExplanationGeneration> {
     if (!this.client || this.now() < this.#openUntil)
       return { source: "template", text: template };
     const startedAt = performance.now();
     try {
-      const raw = await this.completeWithOneRetry(facts);
+      const raw = await this.completeWithOneRetry(facts, locale);
       const parsed = RewriteSchema.safeParse(JSON.parse(raw));
       if (!parsed.success || /\d/.test(parsed.data.text)) {
         this.#recordFailure();
@@ -73,12 +75,14 @@ export class ExplanationGenerator {
     }
   }
 
-  private async completeWithOneRetry(facts: ExplanationFacts): Promise<string> {
+  private async completeWithOneRetry(
+    facts: ExplanationFacts,
+    locale: SupportedLocale,
+  ): Promise<string> {
     const messages = [
       {
         role: "system" as const,
-        content:
-          'Rewrite the supplied travel explanation facts in concise Russian using at most three short sentences. Return strict JSON {"text":string}. Do not use digits, add facts, infer private values, or give advice.',
+        content: `Rewrite the supplied travel explanation facts in concise ${locale === "ru" ? "Russian" : "English"} using at most three short sentences. Return strict JSON {"text":string}. Do not use digits, add facts, infer private values, or give advice.`,
       },
       { role: "user" as const, content: JSON.stringify(facts) },
     ];

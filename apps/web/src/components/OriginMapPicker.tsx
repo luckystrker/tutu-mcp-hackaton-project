@@ -2,7 +2,9 @@ import type { City, ParticipantGroupDto } from "@rendezvous/contracts";
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { findNearestCity } from "../lib/geolocation.js";
+import { currentLocale } from "../i18n/index.js";
 
 type GeoState =
   | { status: "idle" }
@@ -21,21 +23,22 @@ export function OriginMapPicker({
   selectedCityId: string;
   onSelect: (cityId: string) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const [geoState, setGeoState] = useState<GeoState>({ status: "idle" });
   const selectedCity = cities.find(({ id }) => id === selectedCityId);
   const orderedCities = useMemo(
     () =>
       [...cities].sort((left, right) =>
-        left.name.localeCompare(right.name, "ru"),
+        left.name.localeCompare(right.name, currentLocale()),
       ),
-    [cities],
+    [cities, i18n.resolvedLanguage],
   );
 
   function locate() {
     if (!navigator.geolocation) {
       setGeoState({
         status: "error",
-        message: "Геолокация недоступна. Выберите город на карте или списком.",
+        message: t("origin.unavailable"),
       });
       return;
     }
@@ -46,7 +49,7 @@ export function OriginMapPicker({
         if (!nearest) {
           setGeoState({
             status: "error",
-            message: "Не удалось найти поддерживаемый город поблизости.",
+            message: t("origin.noNearby"),
           });
           return;
         }
@@ -55,8 +58,8 @@ export function OriginMapPicker({
           status: "found",
           message:
             nearest.distanceKm <= 50
-              ? `Определили город: ${nearest.city.name}`
-              : `Ближайший доступный город: ${nearest.city.name}`,
+              ? t("origin.detected", { city: nearest.city.name })
+              : t("origin.nearest", { city: nearest.city.name }),
         });
       },
       (positionError) => {
@@ -64,8 +67,8 @@ export function OriginMapPicker({
           status: "error",
           message:
             positionError.code === positionError.PERMISSION_DENIED
-              ? "Доступ к геопозиции не разрешён. Выберите город вручную."
-              : "Не удалось определить геопозицию. Выберите город вручную.",
+              ? t("origin.denied")
+              : t("origin.failed"),
         });
       },
       { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
@@ -76,8 +79,8 @@ export function OriginMapPicker({
     <section className="origin-picker" aria-labelledby="origin-picker-title">
       <header className="origin-picker__header">
         <div>
-          <h3 id="origin-picker-title">Откуда ты едешь</h3>
-          <p>Выбери точку на карте или разреши определить ближайший город.</p>
+          <h3 id="origin-picker-title">{t("origin.heading")}</h3>
+          <p>{t("origin.description")}</p>
         </div>
         <button
           className="locate-button"
@@ -86,13 +89,15 @@ export function OriginMapPicker({
           disabled={geoState.status === "locating"}
         >
           <LocateIcon />
-          {geoState.status === "locating" ? "Ищем…" : "Моё место"}
+          {geoState.status === "locating"
+            ? t("origin.locating")
+            : t("origin.myLocation")}
         </button>
       </header>
 
       <div className="origin-picker__selection" aria-live="polite">
-        <span>Выбрано</span>
-        <strong>{selectedCity?.name ?? "Выберите город"}</strong>
+        <span>{t("origin.selected")}</span>
+        <strong>{selectedCity?.name ?? t("origin.choose")}</strong>
         {geoState.status !== "idle" && geoState.status !== "locating" && (
           <small className={`geo-feedback geo-feedback--${geoState.status}`}>
             {geoState.message}
@@ -107,23 +112,23 @@ export function OriginMapPicker({
         onSelect={onSelect}
       />
 
-      <div className="map-legend" aria-label="Обозначения на карте">
+      <div className="map-legend" aria-label={t("origin.legend")}>
         <span>
           <i className="map-key map-key--hub" />
-          Крупный город
+          {t("origin.hub")}
         </span>
         <span>
           <i className="map-key map-key--selected" />
-          Твой город
+          {t("origin.yourCity")}
         </span>
         <span>
           <i className="map-key map-key--friend" />
-          Друзья
+          {t("origin.friends")}
         </span>
       </div>
 
       <label className="origin-picker__select">
-        Город списком
+        {t("origin.list")}
         <select
           name="origin"
           value={selectedCityId}
@@ -136,9 +141,7 @@ export function OriginMapPicker({
           ))}
         </select>
       </label>
-      <p className="origin-picker__privacy">
-        Точные координаты не сохраняются. Друзья увидят только выбранный город.
-      </p>
+      <p className="origin-picker__privacy">{t("origin.privacy")}</p>
     </section>
   );
 }
@@ -154,6 +157,7 @@ function OriginMap({
   selectedCityId: string;
   onSelect: (cityId: string) => void;
 }) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const cityLayerRef = useRef<L.LayerGroup | null>(null);
@@ -250,7 +254,7 @@ function OriginMap({
         }),
         keyboard: true,
         zIndexOffset: 600,
-        title: `${city.name}: ${names.length} ${friendWord(names.length)}`,
+        title: `${city.name}: ${t("origin.friendCount", { count: names.length })}`,
       });
       const tooltip = document.createElement("span");
       tooltip.textContent = `${names.join(", ")} · ${city.name}`;
@@ -267,17 +271,9 @@ function OriginMap({
       ref={containerRef}
       className="origin-map"
       role="application"
-      aria-label="Карта городов. Для доступного выбора используйте список под картой."
+      aria-label={t("origin.mapLabel")}
     />
   );
-}
-
-function friendWord(count: number): string {
-  const tail = count % 10;
-  const lastTwo = count % 100;
-  if (tail === 1 && lastTwo !== 11) return "друг";
-  if (tail >= 2 && tail <= 4 && (lastTwo < 12 || lastTwo > 14)) return "друга";
-  return "друзей";
 }
 
 function LocateIcon() {

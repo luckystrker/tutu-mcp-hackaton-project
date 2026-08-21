@@ -4,6 +4,8 @@ import type {
   ExplanationFacts,
   PublicCity,
 } from "@rendezvous/contracts";
+import { localizePublicCity } from "@rendezvous/domain";
+import type { SupportedLocale } from "@rendezvous/i18n";
 import {
   compareDestinations,
   type DestinationSolution,
@@ -17,8 +19,10 @@ import { ApplicationError } from "./errors.js";
 
 const FACTS_VERSION = "explanation-facts-v1" as const;
 const MAX_TEXT_LENGTH = 2_000;
-const OMITTED_SUFFIX = " Пропустили ещё несколько более сложных изменений.";
-const CHANGE_BUDGET = MAX_TEXT_LENGTH - OMITTED_SUFFIX.length;
+const OMITTED_SUFFIX = {
+  en: "Several more complex changes were omitted.",
+  ru: "Пропустили ещё несколько более сложных изменений.",
+} as const;
 
 export class ExplanationService {
   constructor(
@@ -31,15 +35,16 @@ export class ExplanationService {
     actorId: string,
     tripId: string,
     input: ExplainInput,
+    locale: SupportedLocale = "ru",
   ): Promise<ExplainResponse> {
     const context = await this.repository.getExplanationContext(
       actorId,
       tripId,
     );
-    const facts = this.buildFacts(context, input);
-    const template = renderExplanation(facts);
+    const facts = localizeFacts(this.buildFacts(context, input), locale);
+    const template = renderExplanation(facts, locale);
     const generated = this.generator
-      ? await this.generator.generate(facts, template)
+      ? await this.generator.generate(facts, template, locale)
       : { source: "template" as const, text: template };
     return { ...generated, factsVersion: FACTS_VERSION, facts };
   }
@@ -178,33 +183,46 @@ function strongestComponent(
   )[0]![0];
 }
 
-export function renderExplanation(facts: ExplanationFacts): string {
+export function renderExplanation(
+  facts: ExplanationFacts,
+  locale: SupportedLocale = "ru",
+): string {
   if (facts.type === "counterfactual") {
     if (facts.changes.length === 0)
-      return facts.city
-        ? `Для ${facts.city.name} нет одного безопасного минимального изменения.`
-        : "Нет одного безопасного минимального изменения, которое откроет новый город.";
-    return renderChangesWithinBudget(facts.changes);
+      return locale === "ru"
+        ? facts.city
+          ? `Для ${facts.city.name} нет одного безопасного минимального изменения.`
+          : "Нет одного безопасного минимального изменения, которое откроет новый город."
+        : facts.city
+          ? `There is no single safe minimal change for ${facts.city.name}.`
+          : "There is no single safe minimal change that unlocks a new city.";
+    return renderChangesWithinBudget(facts.changes, locale);
   }
-  const component = componentLabel(facts.strongestComponent);
+  const component = componentLabel(facts.strongestComponent, locale);
   if (!facts.reference)
-    return `${facts.city.name} остаётся единственным подходящим вариантом. Его сильная сторона — ${component}.`;
-  return `${facts.city.name}: разница с ${facts.reference.name} — ${signed(facts.scoreDelta)} балла, ${signedMinutes(facts.commonTimeDeltaMinutes)} вместе, ${signedMoney(facts.groupCostDelta.amount)} на группу и ${signedMinutes(facts.travelTimeDeltaMinutes)} в дороге. Сильная сторона — ${component}.`;
+    return locale === "ru"
+      ? `${facts.city.name} остаётся единственным подходящим вариантом. Его сильная сторона — ${component}.`
+      : `${facts.city.name} remains the only suitable option. Its strongest point is ${component}.`;
+  return locale === "ru"
+    ? `${facts.city.name}: разница с ${facts.reference.name} — ${signed(facts.scoreDelta)} балла, ${signedMinutes(facts.commonTimeDeltaMinutes, locale)} вместе, ${signedMoney(facts.groupCostDelta.amount)} на группу и ${signedMinutes(facts.travelTimeDeltaMinutes, locale)} в дороге. Сильная сторона — ${component}.`
+    : `${facts.city.name}: compared with ${facts.reference.name}, the difference is ${signed(facts.scoreDelta)} points, ${signedMinutes(facts.commonTimeDeltaMinutes, locale)} together, ${signedMoney(facts.groupCostDelta.amount)} for the group and ${signedMinutes(facts.travelTimeDeltaMinutes, locale)} in travel. Its strongest point is ${component}.`;
 }
 
 function renderChangesWithinBudget(
   changes: Extract<ExplanationFacts, { type: "counterfactual" }>["changes"],
+  locale: SupportedLocale,
 ): string {
   const sentences: string[] = [];
   let used = 0;
+  const suffix = OMITTED_SUFFIX[locale];
+  const budget = MAX_TEXT_LENGTH - suffix.length - 1;
   for (const change of changes) {
-    const sentence = renderChange(change);
-    if (sentences.length > 0 && used + sentence.length + 1 > CHANGE_BUDGET)
-      break;
+    const sentence = renderChange(change, locale);
+    if (sentences.length > 0 && used + sentence.length + 1 > budget) break;
     sentences.push(sentence);
     used += sentence.length + 1;
   }
-  if (sentences.length < changes.length) sentences.push(OMITTED_SUFFIX.trim());
+  if (sentences.length < changes.length) sentences.push(suffix);
   return sentences.join(" ").slice(0, MAX_TEXT_LENGTH).trimEnd();
 }
 
@@ -213,14 +231,31 @@ function renderChange(
     ExplanationFacts,
     { type: "counterfactual" }
   >["changes"][number],
+  locale: SupportedLocale,
 ): string {
   const cities = change.unlockedCities.map(({ name }) => name).join(", ");
   if (change.affectedParticipant === "private")
-    return `Анонимному участнику нужно немного смягчить ${constraintLabel(change.constraint)} — это откроет: ${cities}.`;
-  const owner = change.affectedParticipant === "self" ? "Вам" : "Группе";
-  const delta = change.delta === undefined ? "" : ` на ${formatDelta(change)}`;
+    return locale === "ru"
+      ? `Анонимному участнику нужно немного смягчить ${constraintLabel(change.constraint, locale)} — это откроет: ${cities}.`
+      : `An anonymous participant needs to relax ${constraintLabel(change.constraint, locale)} slightly, unlocking: ${cities}.`;
+  const owner =
+    locale === "ru"
+      ? change.affectedParticipant === "self"
+        ? "Вам"
+        : "Группе"
+      : change.affectedParticipant === "self"
+        ? "You"
+        : "The group";
+  const delta =
+    change.delta === undefined
+      ? ""
+      : locale === "ru"
+        ? ` на ${formatDelta(change, locale)}`
+        : ` by ${formatDelta(change, locale)}`;
   const mode = change.mode ? ` (${change.mode})` : "";
-  return `${owner} достаточно смягчить ${constraintLabel(change.constraint)}${delta}${mode} — это откроет: ${cities}.`;
+  return locale === "ru"
+    ? `${owner} достаточно смягчить ${constraintLabel(change.constraint, locale)}${delta}${mode} — это откроет: ${cities}.`
+    : `${owner} can relax ${constraintLabel(change.constraint, locale)}${delta}${mode}, unlocking: ${cities}.`;
 }
 
 function formatDelta(
@@ -228,17 +263,18 @@ function formatDelta(
     ExplanationFacts,
     { type: "counterfactual" }
   >["changes"][number],
+  locale: SupportedLocale,
 ) {
   return change.constraint === "budget"
     ? `${change.delta} ₽`
-    : `${change.delta} мин`;
+    : `${change.delta} ${locale === "ru" ? "мин" : "min"}`;
 }
 
 function signed(value: number) {
   return `${value > 0 ? "+" : ""}${value}`;
 }
-function signedMinutes(value: number) {
-  return `${signed(value)} мин`;
+function signedMinutes(value: number, locale: SupportedLocale) {
+  return `${signed(value)} ${locale === "ru" ? "мин" : "min"}`;
 }
 function signedMoney(value: number) {
   return `${signed(value)} ₽`;
@@ -246,23 +282,68 @@ function signedMoney(value: number) {
 function round(value: number) {
   return Math.round(value * 100) / 100;
 }
-function componentLabel(value: keyof DestinationSolution["components"]) {
-  return {
-    together: "время вместе",
-    cost: "стоимость",
-    travel: "короткая дорога",
-    synchronization: "синхронность",
-    fairness: "справедливость",
-  }[value];
+function componentLabel(
+  value: keyof DestinationSolution["components"],
+  locale: SupportedLocale,
+) {
+  const labels = {
+    en: {
+      together: "time together",
+      cost: "cost",
+      travel: "shorter travel",
+      synchronization: "synchronization",
+      fairness: "fairness",
+    },
+    ru: {
+      together: "время вместе",
+      cost: "стоимость",
+      travel: "короткая дорога",
+      synchronization: "синхронность",
+      fairness: "справедливость",
+    },
+  } as const;
+  return labels[locale][value];
 }
-function constraintLabel(value: string) {
+function constraintLabel(value: string, locale: SupportedLocale) {
   return (
-    {
-      budget: "бюджет",
-      departure: "время выезда",
-      return: "время возвращения",
-      transport: "ограничение транспорта",
-      minTogetherTime: "минимальное время вместе",
-    }[value] ?? value
+    (locale === "ru"
+      ? {
+          budget: "бюджет",
+          departure: "время выезда",
+          return: "время возвращения",
+          transport: "ограничение транспорта",
+          minTogetherTime: "минимальное время вместе",
+        }
+      : {
+          budget: "the budget",
+          departure: "the departure time",
+          return: "the return time",
+          transport: "the transport restriction",
+          minTogetherTime: "the minimum time together",
+        })[value] ?? value
   );
+}
+
+function localizeFacts(
+  facts: ExplanationFacts,
+  locale: SupportedLocale,
+): ExplanationFacts {
+  if (facts.type === "counterfactual")
+    return {
+      ...facts,
+      city: facts.city ? localizePublicCity(facts.city, locale) : null,
+      changes: facts.changes.map((change) => ({
+        ...change,
+        unlockedCities: change.unlockedCities.map((city) =>
+          localizePublicCity(city, locale),
+        ),
+      })),
+    };
+  return {
+    ...facts,
+    city: localizePublicCity(facts.city, locale),
+    reference: facts.reference
+      ? localizePublicCity(facts.reference, locale)
+      : null,
+  };
 }

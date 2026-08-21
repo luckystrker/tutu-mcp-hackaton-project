@@ -17,11 +17,13 @@ import {
   TripMenuPage,
   TripsPage,
 } from "../pages/TripPages.js";
+import { SettingsPage } from "../pages/SettingsPage.js";
 
 export const router = createBrowserRouter([
   { path: "/", element: <StartPage /> },
   { path: "/new", element: <CreateTripPage /> },
   { path: "/trips", element: <TripsPage /> },
+  { path: "/settings", element: <SettingsPage /> },
   { path: "/join/:inviteToken", element: <JoinPage /> },
   { path: "/trips/:tripId/me", element: <PreferencesPage /> },
   { path: "/trips/:tripId/live", element: <LiveRoomPage /> },

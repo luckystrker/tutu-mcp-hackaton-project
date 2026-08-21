@@ -16,7 +16,7 @@
     "build": "tsc -b && npm run build:web",
     "build:web": "npm run build -w @rendezvous/web",
     "typecheck": "tsc -b --pretty false",
-    "lint": "eslint . && prettier --check . && node tools/check-boundaries.mjs",
+    "lint": "eslint . && prettier --check . && node tools/check-boundaries.mjs && node tools/check-localization.mjs",
     "format": "prettier --write .",
     "test": "vitest run",
     "test:e2e": "playwright test",

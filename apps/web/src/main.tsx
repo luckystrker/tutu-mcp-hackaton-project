@@ -6,9 +6,11 @@ import {
   applyTelegramStartParam,
   initializeTelegramBridge,
 } from "./telegram/bridge.js";
+import { initializeI18n } from "./i18n/index.js";
 
 initializeTelegramBridge();
 applyTelegramStartParam();
+await initializeI18n();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element is missing");

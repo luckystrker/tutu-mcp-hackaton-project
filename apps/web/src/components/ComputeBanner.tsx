@@ -1,4 +1,5 @@
 import type { ComputeStatus } from "@rendezvous/contracts";
+import { useTranslation } from "react-i18next";
 
 export function ComputeBanner({
   status,
@@ -7,22 +8,15 @@ export function ComputeBanner({
   status: ComputeStatus;
   hasPrevious: boolean;
 }) {
+  const { t } = useTranslation();
   if (status === "idle") return null;
   const content = {
     running: [
-      "Пересчитываем маршрут",
-      hasPrevious
-        ? "Пока показываем предыдущий результат"
-        : "Обычно это занимает меньше минуты",
+      t("compute.running.title"),
+      hasPrevious ? t("compute.running.previous") : t("compute.running.fresh"),
     ],
-    degraded: [
-      "Некоторые варианты транспорта временно недоступны",
-      "Рейтинг собран из доступных маршрутов — проверим остальные позже",
-    ],
-    failed: [
-      "Расчёт не завершён",
-      "Ваши условия сохранены — попробуйте обновить позже",
-    ],
+    degraded: [t("compute.degraded.title"), t("compute.degraded.description")],
+    failed: [t("compute.failed.title"), t("compute.failed.description")],
   }[status];
   return (
     <aside className={`compute-banner compute-banner--${status}`} role="status">

@@ -50,3 +50,7 @@
 ## Scope
 
 `MUST` из SPEC входит в этапы 01–08. `SHOULD` сосредоточен в этапе 09 и выполняется в порядке: counterfactuals → template Why → compare → natural-language parser/free-form AI → дополнительная анимация. При дефиците времени сокращения выполняются строго по разделу 56 SPEC; live collaboration, Tutu MCP, fairness, ranking и visual explanation не сокращаются.
+
+## Развитие после MVP
+
+- [11. English-first localization и настройка языка](11-english-first-localization.md) — двуязычный системный интерфейс, локальное предпочтение пользователя, locale-aware API и English fallback.

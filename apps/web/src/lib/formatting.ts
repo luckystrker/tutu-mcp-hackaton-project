@@ -1,19 +1,34 @@
 import type { Money } from "@rendezvous/contracts";
+import i18n, { currentLocale } from "../i18n/index.js";
 
 export function formatMoney(money?: Money | null): string {
   if (!money) return "—";
-  return new Intl.NumberFormat("ru-RU", {
+  return new Intl.NumberFormat(currentLocale() === "ru" ? "ru-RU" : "en-US", {
     style: "currency",
     currency: money.currency,
+    currencyDisplay: "narrowSymbol",
     maximumFractionDigits: 0,
   }).format(money.amount);
 }
 
 export function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);
-  return hours >= 24
-    ? `${Math.floor(hours / 24)} д ${hours % 24} ч`
-    : `${hours} ч`;
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    return i18n.t("format.durationDays", {
+      days,
+      dayLabel: i18n.t("format.day", { count: days }).replace(/^\d+\s*/, ""),
+      hours: remainingHours,
+      hourLabel: i18n
+        .t("format.hour", { count: remainingHours })
+        .replace(/^\d+\s*/, ""),
+    });
+  }
+  return i18n.t("format.durationHours", {
+    hours,
+    hourLabel: i18n.t("format.hour", { count: hours }).replace(/^\d+\s*/, ""),
+  });
 }
 
 function pad(value: number): string {

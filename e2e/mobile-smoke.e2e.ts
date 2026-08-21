@@ -152,6 +152,7 @@ async function fillPreferences(page: Page, origin: string, natural: string) {
 function mobileContext(browser: Browser) {
   return browser.newContext({
     baseURL: "http://127.0.0.1:5173",
+    locale: "ru-RU",
     viewport: { width: 412, height: 839 },
     deviceScaleFactor: 2.625,
     hasTouch: true,

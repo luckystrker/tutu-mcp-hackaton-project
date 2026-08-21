@@ -5,7 +5,7 @@ import {
   type TripPublic,
   type TransportMode,
 } from "@rendezvous/contracts";
-import { CITY_CATALOG } from "@rendezvous/domain";
+import { CITY_CATALOG, localizeCity } from "@rendezvous/domain";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
@@ -25,6 +25,8 @@ import {
   type Ref,
 } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import i18n, { currentLocale } from "../i18n/index.js";
 import { useApi } from "../app/providers.js";
 import { AppFrame } from "../components/AppFrame.js";
 import { CityCard } from "../components/CityCard.js";
@@ -45,7 +47,10 @@ import {
   useTrips,
 } from "../features/trips/queries.js";
 import { useTripUi } from "../features/trips/ui-store.js";
-import { parseNaturalPreference } from "../features/trips/natural-preference.js";
+import {
+  classifyNaturalQuestion,
+  parseNaturalPreference,
+} from "../features/trips/natural-preference.js";
 import { useRankingViewState } from "../features/ranking/model.js";
 import type { TripView } from "../features/trips/api.js";
 import { DEMO_TRIP_IDS } from "../demo/ids.js";
@@ -61,53 +66,61 @@ import {
   formatTime,
 } from "../lib/formatting.js";
 
-const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
-  train: "Поезд",
-  air: "Самолёт",
-  bus: "Автобус",
-  suburban: "Электричка",
+const TRANSPORT_MODE_LABEL_KEYS: Record<TransportMode, string> = {
+  train: "transport.train",
+  air: "transport.air",
+  bus: "transport.bus",
+  suburban: "transport.suburban",
 };
 
-const MOSCOW_ID = CITY_CATALOG.find((city) => city.name === "Москва")!.id;
+const MOSCOW_ID = "10000000-0000-4000-8000-000000000001";
 const OriginMapPicker = lazy(async () => {
   const module = await import("../components/OriginMapPicker.js");
   return { default: module.OriginMapPicker };
 });
 
 export function StartPage() {
+  const { t } = useTranslation();
   const { data: trips, isLoading } = useTrips();
   const recent = trips?.slice(0, 2) ?? [];
   return (
     <AppFrame>
       <main className="home-page">
         <section className="home-hero">
-          <p className="eyebrow">Добрый вечер</p>
+          <p className="eyebrow">{t("home.greeting")}</p>
           <h1>
-            Встретимся
+            {t("home.title")}
             <br />
-            <em>посередине</em>
+            <em>{t("home.titleAccent")}</em>
           </h1>
-          <p className="lead">
-            Соберите всех в одной поездке — мы найдём город, который подходит
-            каждому.
-          </p>
+          <p className="lead">{t("home.lead")}</p>
         </section>
-        <nav className="home-actions" aria-label="Главное меню">
+        <nav className="home-actions" aria-label={t("home.mainMenu")}>
           <Link className="home-action home-action--primary" to="/new">
             <span>＋</span>
             <div>
-              <strong>Новая поездка</strong>
-              <small>Создать и позвать друзей</small>
+              <strong>{t("home.newTrip")}</strong>
+              <small>{t("home.newTripHint")}</small>
             </div>
             <i>→</i>
           </Link>
           <Link className="home-action" to="/trips">
             <span>⌁</span>
             <div>
-              <strong>Мои поездки</strong>
+              <strong>{t("home.myTrips")}</strong>
               <small>
-                {isLoading ? "Загружаем…" : `${trips?.length ?? 0} поездок`}
+                {isLoading
+                  ? t("common.loading")
+                  : t("home.tripCount", { count: trips?.length ?? 0 })}
               </small>
+            </div>
+            <i>→</i>
+          </Link>
+          <Link className="home-action" to="/settings">
+            <span>Aa</span>
+            <div>
+              <strong>{t("common.settings")}</strong>
+              <small>{t("home.settingsHint")}</small>
             </div>
             <i>→</i>
           </Link>
@@ -115,8 +128,8 @@ export function StartPage() {
         {recent.length > 0 && (
           <section className="recent-trips">
             <header>
-              <h2>Продолжить</h2>
-              <Link to="/trips">Все</Link>
+              <h2>{t("home.continue")}</h2>
+              <Link to="/trips">{t("home.all")}</Link>
             </header>
             {recent.map((trip) => (
               <TripListItem key={trip.id} trip={trip} />
@@ -129,11 +142,12 @@ export function StartPage() {
 }
 
 export function CreateTripPage() {
+  const { t } = useTranslation();
   const api = useApi();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [title] = useState(() => randomTripTitle(new Date()));
+  const [title] = useState(() => randomTripTitle(new Date(), currentLocale()));
   const [country, setCountry] = useState(() => guessCountryCode());
   const period = useMemo(() => nextDaysOff(new Date(), country), [country]);
   useEffect(() => {
@@ -149,7 +163,7 @@ export function CreateTripPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (event.currentTarget.querySelector('input[aria-invalid="true"]')) {
-      return setError("Проверьте даты: формат дд.мм.гггг");
+      return setError(t("error.dateFormat"));
     }
     const data = new FormData(event.currentTarget);
     const parsed = CreateTripInputSchema.safeParse({
@@ -161,37 +175,34 @@ export function CreateTripPage() {
       allowInternational: data.get("allowInternational") === "on",
       preferredTransportModes: data.getAll("preferredTransport"),
     });
-    if (!parsed.success) return setError("Проверьте название и даты поездки");
+    if (!parsed.success) return setError(t("error.tripFields"));
     setBusy(true);
     try {
       const created = await api.createTrip(parsed.data);
       navigate(`/trips/${created.trip.id}/me`);
     } catch {
       setBusy(false);
-      setError("Не удалось создать поездку. Попробуйте ещё раз");
+      setError(t("error.createTrip"));
     }
   }
   return (
-    <AppFrame title="Новая поездка" back backTo="/">
+    <AppFrame title={t("create.title")} back backTo="/">
       <main className="start-page">
-        <p className="eyebrow">Встретиться посередине</p>
+        <p className="eyebrow">{t("create.eyebrow")}</p>
         <h1>
-          Куда всем
+          {t("create.heading")}
           <br />
-          <em>по пути?</em>
+          <em>{t("create.headingAccent")}</em>
         </h1>
-        <p className="lead">
-          Сравним дорогу, бюджет и время каждого — и найдём честное место
-          встречи.
-        </p>
+        <p className="lead">{t("create.lead")}</p>
         <form className="create-card" onSubmit={submit}>
           <label>
-            Название поездки
+            {t("create.tripName")}
             <input name="title" defaultValue={title} />
           </label>
           <div className="form-grid">
             <label>
-              Примерно с <small>ближайшие выходные</small>
+              {t("create.from")} <small>{t("create.nearestWeekend")}</small>
               <DateField
                 key={`from-${country}`}
                 name="from"
@@ -200,7 +211,7 @@ export function CreateTripPage() {
               />
             </label>
             <label>
-              Примерно до <small>ближайшие выходные</small>
+              {t("create.to")} <small>{t("create.nearestWeekend")}</small>
               <DateField
                 key={`to-${country}`}
                 name="to"
@@ -210,7 +221,7 @@ export function CreateTripPage() {
             </label>
           </div>
           <fieldset className="choice-fieldset">
-            <legend>Сколько нас?</legend>
+            <legend>{t("create.people")}</legend>
             <div className="number-choices">
               {[2, 3, 4].map((count) => (
                 <label key={count}>
@@ -226,7 +237,7 @@ export function CreateTripPage() {
             </div>
           </fieldset>
           <label>
-            Хотим провести вместе, часов
+            {t("create.togetherHours")}
             <input
               name="minTogetherHours"
               type="number"
@@ -236,7 +247,7 @@ export function CreateTripPage() {
             />
           </label>
           <fieldset className="choice-fieldset">
-            <legend>Как приятнее добираться</legend>
+            <legend>{t("create.transport")}</legend>
             <div className="checks">
               <label>
                 <input
@@ -245,32 +256,32 @@ export function CreateTripPage() {
                   value="train"
                   defaultChecked
                 />
-                <span>Поезд</span>
+                <span>{t("transport.train")}</span>
               </label>
               <label>
                 <input type="checkbox" name="preferredTransport" value="air" />
-                <span>Самолёт</span>
+                <span>{t("transport.air")}</span>
               </label>
               <label>
                 <input type="checkbox" name="preferredTransport" value="bus" />
-                <span>Автобус</span>
+                <span>{t("transport.bus")}</span>
               </label>
             </div>
           </fieldset>
           <label className="toggle-row">
             <input type="checkbox" name="allowInternational" />
-            <span>Можно искать встречу за границей</span>
+            <span>{t("create.international")}</span>
           </label>
           {error && <p className="form-error">{error}</p>}
           <button className="primary-button" disabled={busy}>
-            {busy ? "Создаём…" : "Создать поездку"}
+            {busy ? t("create.submitting") : t("create.submit")}
           </button>
         </form>
         <section
           className="demo-links"
           hidden={import.meta.env.VITE_API_MODE !== "fixture"}
         >
-          <p>Посмотреть fixture-сценарии</p>
+          <p>{t("create.demo")}</p>
           <div>
             {Object.entries(DEMO_TRIP_IDS).map(([name, id]) => (
               <Link
@@ -288,21 +299,26 @@ export function CreateTripPage() {
 }
 
 export function TripsPage() {
+  const { t } = useTranslation();
   const { data: trips, isLoading, error } = useTrips();
   return (
-    <AppFrame title="Мои поездки" back backTo="/">
+    <AppFrame title={t("trips.title")} back backTo="/">
       <main className="trips-page">
         <div className="page-heading">
           <div>
-            <p className="eyebrow">Все встречи</p>
-            <h1>Поездки</h1>
+            <p className="eyebrow">{t("trips.eyebrow")}</p>
+            <h1>{t("trips.heading")}</h1>
           </div>
-          <Link className="round-link" to="/new" aria-label="Создать поездку">
+          <Link
+            className="round-link"
+            to="/new"
+            aria-label={t("trips.createLabel")}
+          >
             ＋
           </Link>
         </div>
         {isLoading ? (
-          <div className="inline-loading">Загружаем поездки…</div>
+          <div className="inline-loading">{t("trips.loading")}</div>
         ) : error ? (
           <LoadFailed />
         ) : trips?.length ? (
@@ -314,10 +330,10 @@ export function TripsPage() {
         ) : (
           <section className="empty-state">
             <span>＋</span>
-            <h3>Пока нет поездок</h3>
-            <p>Создайте первую и отправьте приглашение друзьям.</p>
+            <h3>{t("trips.empty")}</h3>
+            <p>{t("trips.emptyHint")}</p>
             <Link className="primary-button as-link" to="/new">
-              Создать поездку
+              {t("create.submit")}
             </Link>
           </section>
         )}
@@ -327,31 +343,38 @@ export function TripsPage() {
 }
 
 export function TripMenuPage() {
+  const { t } = useTranslation();
   const id = useTripId();
   const { data: view, isLoading, error } = useTrip(id);
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   const items = [
-    ["◎", "Обзор и рейтинг", "Города и статус участников", "live"],
-    ["✎", "Мои условия", "Время, бюджет и транспорт", "me"],
-    ["↗", "Позвать друзей", "Ссылка на эту поездку", "invite"],
-    ["⇄", "Сравнить города", "Ключевые показатели рядом", "compare"],
-    ["♡", "Общий выбор", "Реакции и shortlist", "shortlist"],
+    ["◎", t("menu.overview"), t("menu.overviewHint"), "live"],
+    ["✎", t("menu.preferences"), t("menu.preferencesHint"), "me"],
+    ["↗", t("menu.invite"), t("menu.inviteHint"), "invite"],
+    ["⇄", t("menu.compare"), t("menu.compareHint"), "compare"],
+    ["♡", t("menu.shortlist"), t("menu.shortlistHint"), "shortlist"],
+    ["Aa", t("common.settings"), t("menu.settingsHint"), "settings"],
   ] as const;
   return (
-    <AppFrame title="Меню поездки" tripId={id}>
+    <AppFrame title={t("menu.title")} tripId={id}>
       <main className="trip-menu-page">
         <section className="trip-menu-summary">
           <p className="eyebrow">{statusLabel(view.trip.status)}</p>
           <h1>{view.trip.title}</h1>
           <p>
-            {view.participants.filter(({ ready }) => ready).length} из{" "}
-            {view.trip.expectedParticipants} участников готовы
+            {t("menu.ready", {
+              ready: view.participants.filter(({ ready }) => ready).length,
+              total: view.trip.expectedParticipants,
+            })}
           </p>
         </section>
-        <nav className="trip-menu-list" aria-label="Разделы поездки">
+        <nav className="trip-menu-list" aria-label={t("menu.sections")}>
           {items.map(([icon, title, subtitle, path]) => (
-            <Link key={path} to={`/trips/${id}/${path}`}>
+            <Link
+              key={path}
+              to={path === "settings" ? "/settings" : `/trips/${id}/${path}`}
+            >
               <span>{icon}</span>
               <div>
                 <strong>{title}</strong>
@@ -364,15 +387,15 @@ export function TripMenuPage() {
             <Link to={`/trips/${id}/final`}>
               <span>✓</span>
               <div>
-                <strong>Итог поездки</strong>
-                <small>Зафиксированный маршрут</small>
+                <strong>{t("menu.final")}</strong>
+                <small>{t("menu.finalHint")}</small>
               </div>
               <i>→</i>
             </Link>
           )}
         </nav>
         <Link className="back-to-trips" to="/trips">
-          ← Ко всем поездкам
+          ← {t("menu.back")}
         </Link>
       </main>
     </AppFrame>
@@ -380,6 +403,7 @@ export function TripMenuPage() {
 }
 
 export function InvitePage() {
+  const { t } = useTranslation();
   const id = useTripId();
   const api = useApi();
   const { data: view, isLoading: tripLoading } = useTrip(id);
@@ -398,50 +422,44 @@ export function InvitePage() {
     if (navigator.share) {
       await navigator.share({
         title: tripTitle,
-        text: "Присоединяйся к нашей поездке в Rendezvous",
+        text: t("invite.shareText"),
         url: inviteUrl,
       });
       return;
     }
     await copyInvite(inviteUrl);
-    setFeedback("Ссылка скопирована");
+    setFeedback(t("invite.copied"));
   }
   return (
-    <AppFrame title="Приглашение" back tripId={id}>
+    <AppFrame title={t("invite.title")} back tripId={id}>
       <main className="invite-page">
         <div className="invite-visual">
-          <span>Д</span>
+          <span>{t("invite.avatar")}</span>
           <span>＋</span>
           <span>?</span>
         </div>
-        <p className="eyebrow">Соберите компанию</p>
-        <h1>Позвать в поездку</h1>
-        <p className="lead">
-          Друг откроет ссылку, присоединится к «{view.trip.title}» и заполнит
-          только свои условия.
-        </p>
+        <p className="eyebrow">{t("invite.eyebrow")}</p>
+        <h1>{t("invite.heading")}</h1>
+        <p className="lead">{t("invite.lead", { title: view.trip.title })}</p>
         <button className="primary-button" onClick={() => void share()}>
-          ↗ Поделиться ссылкой
+          ↗ {t("invite.share")}
         </button>
         <button
           className="copy-invite"
           onClick={async () => {
             await copyInvite(inviteUrl);
-            setFeedback("Ссылка скопирована");
+            setFeedback(t("invite.copied"));
           }}
         >
           <span>{inviteUrl}</span>
-          <strong>Копировать</strong>
+          <strong>{t("invite.copy")}</strong>
         </button>
         <p className="invite-feedback" aria-live="polite">
           {feedback}
         </p>
         <aside className="invite-privacy">
-          <strong>Личные данные останутся личными</strong>
-          <p>
-            Приглашённые не увидят бюджеты, временные окна и пожелания друг
-            друга.
-          </p>
+          <strong>{t("invite.privacyTitle")}</strong>
+          <p>{t("invite.privacyText")}</p>
         </aside>
       </main>
     </AppFrame>
@@ -449,6 +467,7 @@ export function InvitePage() {
 }
 
 function TripListItem({ trip }: { trip: TripPublic }) {
+  const { t } = useTranslation();
   const destination = trip.status === "FINALIZED" ? "final" : "live";
   return (
     <Link className="trip-list-item" to={`/trips/${trip.id}/${destination}`}>
@@ -458,7 +477,8 @@ function TripListItem({ trip }: { trip: TripPublic }) {
       <div>
         <strong>{trip.title}</strong>
         <small>
-          {statusLabel(trip.status)} · обновлено {formatDate(trip.updatedAt)}
+          {statusLabel(trip.status)} ·{" "}
+          {t("trips.updated", { date: formatDate(trip.updatedAt) })}
         </small>
       </div>
       <i>→</i>
@@ -467,6 +487,7 @@ function TripListItem({ trip }: { trip: TripPublic }) {
 }
 
 export function JoinPage() {
+  const { t } = useTranslation();
   const { inviteToken = "" } = useParams();
   const api = useApi();
   const navigate = useNavigate();
@@ -479,26 +500,23 @@ export function JoinPage() {
       navigate(`/trips/${trip.trip.id}/me`);
     } catch {
       setBusy(false);
-      setError("Не удалось присоединиться. Попробуйте ещё раз");
+      setError(t("error.join"));
     }
   }
   return (
     <AppFrame back>
       <main className="center-page">
         <span className="invite-mark">↗</span>
-        <p className="eyebrow">Вас пригласили</p>
+        <p className="eyebrow">{t("join.eyebrow")}</p>
         <h1>
-          Поездка
+          {t("join.heading")}
           <br />
-          начинается здесь
+          {t("join.headingAccent")}
         </h1>
-        <p className="lead">
-          Добавь свои ограничения — личные суммы и предпочтения другие участники
-          не увидят.
-        </p>
+        <p className="lead">{t("join.lead")}</p>
         {error && <p className="form-error">{error}</p>}
         <button className="primary-button" disabled={busy} onClick={join}>
-          {busy ? "Присоединяемся…" : "Присоединиться"}
+          {busy ? t("join.submitting") : t("join.submit")}
         </button>
       </main>
     </AppFrame>
@@ -506,6 +524,7 @@ export function JoinPage() {
 }
 
 export function PreferencesPage() {
+  const { t, i18n } = useTranslation();
   const id = useTripId();
   const { data: view, isLoading, error: loadError } = useTrip(id);
   const mutation = usePreferencesMutation(id);
@@ -515,6 +534,10 @@ export function PreferencesPage() {
   const [weekendPeriod] = useState(() =>
     nextDaysOff(new Date(), guessCountryCode()),
   );
+  const localizedCities = useMemo(
+    () => CITY_CATALOG.map((city) => localizeCity(city, currentLocale())),
+    [i18n.resolvedLanguage],
+  );
   useEffect(() => {
     if (view?.me.originCityId) setOriginCityId(view.me.originCityId);
   }, [view?.me.originCityId]);
@@ -523,11 +546,12 @@ export function PreferencesPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (event.currentTarget.querySelector('input[aria-invalid="true"]')) {
-      return setError("Проверьте даты: формат дд.мм.гггг");
+      return setError(t("error.dateFormat"));
     }
     const data = new FormData(event.currentTarget);
     const natural = parseNaturalPreference(
       String(data.get("naturalPreference") ?? ""),
+      i18n.resolvedLanguage === "ru" ? "ru" : "en",
     );
     const tags = [
       ...new Set([...data.getAll("tags"), ...(natural.destinationTags ?? [])]),
@@ -556,43 +580,38 @@ export function PreferencesPage() {
         issue.path.includes("mustReturnBy"),
       );
       return setError(
-        invalidReturn
-          ? "Время возвращения должно быть позже времени выезда"
-          : "Укажите город, даты и бюджет больше нуля",
+        invalidReturn ? t("error.returnTime") : t("error.preferencesFields"),
       );
     }
     try {
       await mutation.mutateAsync(parsed.data);
     } catch {
-      return setError("Не удалось сохранить условия. Попробуйте ещё раз");
+      return setError(t("error.savePreferences"));
     }
     navigate(`/trips/${id}/live`);
   }
   return (
-    <AppFrame title="Мои условия" back tripId={id} hideTripNav>
+    <AppFrame title={t("preferences.title")} back tripId={id} hideTripNav>
       <main className="form-page">
         <div className="privacy-note">
           <span>◉</span>
           <div>
-            <strong>Это видишь только ты</strong>
-            <p>
-              Группа увидит твой город, готовность и общий статус «подходит /
-              конфликт».
-            </p>
+            <strong>{t("preferences.privateTitle")}</strong>
+            <p>{t("preferences.privateText")}</p>
           </div>
         </div>
         <form onSubmit={submit} className="constraint-form">
           <fieldset>
-            <legend>Обязательные условия</legend>
+            <legend>{t("preferences.required")}</legend>
             <Suspense
               fallback={
                 <div className="origin-map-loading" role="status">
-                  Готовим карту городов…
+                  {t("preferences.mapLoading")}
                 </div>
               }
             >
               <OriginMapPicker
-                cities={CITY_CATALOG}
+                cities={localizedCities}
                 participants={view.participants.filter(
                   (participant) => participant.id !== view.me.id,
                 )}
@@ -602,7 +621,7 @@ export function PreferencesPage() {
             </Suspense>
             <div className="form-grid">
               <label>
-                Могу выехать
+                {t("preferences.departure")}
                 <DateField
                   name="from"
                   defaultValue={
@@ -614,7 +633,7 @@ export function PreferencesPage() {
                 />
               </label>
               <label>
-                Вернуться до
+                {t("preferences.return")}
                 <DateField
                   name="to"
                   defaultValue={
@@ -627,7 +646,7 @@ export function PreferencesPage() {
               </label>
             </div>
             <label>
-              Максимальный бюджет
+              {t("preferences.budget")}
               <input
                 name="budget"
                 type="number"
@@ -638,30 +657,28 @@ export function PreferencesPage() {
             <div className="checks">
               <label>
                 <input type="checkbox" name="forbidden" value="train" />
-                <span>Без поездов</span>
+                <span>{t("preferences.noTrain")}</span>
               </label>
               <label>
                 <input type="checkbox" name="forbidden" value="air" />
-                <span>Без самолётов</span>
+                <span>{t("preferences.noAir")}</span>
               </label>
               <label>
                 <input type="checkbox" name="forbidden" value="bus" />
-                <span>Без автобусов</span>
+                <span>{t("preferences.noBus")}</span>
               </label>
             </div>
           </fieldset>
           <details className="optional-preferences">
             <summary>
-              <span>Уточнить пожелания</span>
-              <small>выбрано: без пересадок</small>
+              <span>{t("preferences.refine")}</span>
+              <small>{t("preferences.selectedDirect")}</small>
             </summary>
             <fieldset>
-              <legend className="sr-only">Дополнительные пожелания</legend>
-              <p className="field-hint">
-                Они помогут расставить варианты, но не исключат города.
-              </p>
+              <legend className="sr-only">{t("preferences.optional")}</legend>
+              <p className="field-hint">{t("preferences.optionalHint")}</p>
               <fieldset className="preference-scale">
-                <legend>Ночной транспорт</legend>
+                <legend>{t("preferences.nightTravel")}</legend>
                 <label>
                   <input
                     type="radio"
@@ -669,15 +686,15 @@ export function PreferencesPage() {
                     value="no"
                     defaultChecked
                   />
-                  Нормально
+                  {t("preferences.fine")}
                 </label>
                 <label>
                   <input type="radio" name="avoidNight" value="yes" />
-                  Лучше не надо
+                  {t("preferences.avoid")}
                 </label>
               </fieldset>
               <fieldset className="preference-scale">
-                <legend>Пересадки</legend>
+                <legend>{t("preferences.transfers")}</legend>
                 <label>
                   <input
                     type="radio"
@@ -685,58 +702,59 @@ export function PreferencesPage() {
                     value="yes"
                     defaultChecked
                   />
-                  Лучше без них
+                  {t("preferences.direct")}
                 </label>
                 <label>
                   <input type="radio" name="direct" value="no" />
-                  Неважно
+                  {t("preferences.noMatter")}
                 </label>
               </fieldset>
               <div className="checks">
                 <label>
                   <input type="checkbox" name="morning" />
-                  <span>Прибытие утром</span>
+                  <span>{t("preferences.morning")}</span>
                 </label>
                 <label>
                   <input type="checkbox" name="tags" value="history" />
-                  <span>История</span>
+                  <span>{t("tag.history")}</span>
                 </label>
                 <label>
                   <input type="checkbox" name="tags" value="food" />
-                  <span>Еда</span>
+                  <span>{t("tag.food")}</span>
                 </label>
                 <label>
                   <input type="checkbox" name="tags" value="quiet" />
-                  <span>Спокойно</span>
+                  <span>{t("tag.quiet")}</span>
                 </label>
                 <label>
                   <input type="checkbox" name="tags" value="nature" />
-                  <span>Природа</span>
+                  <span>{t("tag.nature")}</span>
                 </label>
                 <label>
                   <input type="checkbox" name="tags" value="small-city" />
-                  <span>Малый город</span>
+                  <span>{t("tag.smallCity")}</span>
                 </label>
                 <label>
                   <input type="checkbox" name="tags" value="nightlife" />
-                  <span>Вечерняя жизнь</span>
+                  <span>{t("tag.nightlife")}</span>
                 </label>
               </div>
               <label>
-                Не дольше, часов
+                {t("preferences.maxHours")}
                 <input
                   name="maxHours"
                   type="number"
                   min="1"
                   max="168"
-                  placeholder="Например, 8"
+                  placeholder={t("preferences.maxHoursExample")}
                 />
               </label>
               <label>
-                Своими словами <small>необязательно</small>
+                {t("preferences.natural")}{" "}
+                <small>{t("preferences.optionalLabel")}</small>
                 <input
                   name="naturalPreference"
-                  placeholder="Например: хочется гулять у воды"
+                  placeholder={t("preferences.naturalExample")}
                 />
               </label>
             </fieldset>
@@ -747,7 +765,9 @@ export function PreferencesPage() {
             </p>
           )}
           <button className="primary-button" disabled={mutation.isPending}>
-            {mutation.isPending ? "Сохраняем…" : "Готово, считать варианты"}
+            {mutation.isPending
+              ? t("preferences.saving")
+              : t("preferences.save")}
           </button>
         </form>
       </main>
@@ -756,6 +776,7 @@ export function PreferencesPage() {
 }
 
 export function LiveRoomPage() {
+  const { t } = useTranslation();
   const id = useTripId();
   const { data: view, isLoading, error } = useTrip(id);
   const selected = useTripUi((s) => s.selectedCityByTrip[id]);
@@ -780,7 +801,10 @@ export function LiveRoomPage() {
       const leading = view.destinations[0];
       if (joined && leading)
         setBalanceNotice(
-          `${joined.displayName} сделал${/[ая]$/u.test(joined.displayName) ? "а" : ""} ${leading.city.name} более сбалансированным вариантом.`,
+          t("live.balanceNotice", {
+            name: joined.displayName,
+            city: leading.city.name,
+          }),
         );
     }
     previousReady.current = readyIds;
@@ -807,11 +831,16 @@ export function LiveRoomPage() {
           <div>
             <p className="eyebrow">{view.trip.title}</p>
             <h1>
-              {ready} из {view.trip.expectedParticipants} <em>готовы</em>
+              <em>
+                {t("live.ready", {
+                  ready,
+                  total: view.trip.expectedParticipants,
+                })}
+              </em>
             </h1>
           </div>
           <Link className="edit-conditions-link" to={`/trips/${id}/me`}>
-            Изменить условия
+            {t("live.edit")}
           </Link>
         </header>
         <div className="participant-strip">
@@ -824,12 +853,12 @@ export function LiveRoomPage() {
               <small>{p.displayName}</small>
               <b>
                 {p.suitability === "suitable"
-                  ? "Подходит"
+                  ? t("live.suitable")
                   : p.suitability === "conflict"
-                    ? "Есть конфликт"
+                    ? t("live.conflict")
                     : p.ready
-                      ? "Считаем"
-                      : "Ждём"}
+                      ? t("live.calculating")
+                      : t("live.waiting")}
               </b>
             </div>
           ))}
@@ -846,20 +875,20 @@ export function LiveRoomPage() {
         )}
         <section className="ranking-head">
           <div>
-            <p className="eyebrow">Лучшие варианты</p>
+            <p className="eyebrow">{t("live.best")}</p>
             <h2>
-              {view.destinations.length
-                ? "Ваш топ-3"
-                : "Пока нет подходящих городов"}
+              {view.destinations.length ? t("live.top") : t("live.noCities")}
             </h2>
           </div>
-          {view.destinations.length > 1 && <span>листайте →</span>}
+          {view.destinations.length > 1 && <span>{t("live.swipe")}</span>}
         </section>
         {view.destinations.length > 0 &&
           ready < view.trip.expectedParticipants && (
             <p className="preliminary-label">
-              Предварительный результат · {ready} из{" "}
-              {view.trip.expectedParticipants}
+              {t("live.preliminary", {
+                ready,
+                total: view.trip.expectedParticipants,
+              })}
             </p>
           )}
         {balanceNotice && (
@@ -869,7 +898,9 @@ export function LiveRoomPage() {
         )}
         {view.destinations[0] && (
           <p className="checked-at">
-            Проверено {formatDateTime(view.destinations[0].checkedAt)}
+            {t("live.checked", {
+              date: formatDateTime(view.destinations[0].checkedAt),
+            })}
           </p>
         )}
         {view.destinations.length ? (
@@ -921,6 +952,7 @@ export function LiveRoomPage() {
 }
 
 function ScoringPanel({ id, view }: { id: string; view: TripView }) {
+  const { t } = useTranslation();
   const mutation = useScoringMutation(id);
   const [state, setState] = useState(() => ({
     draft: view.trip.scoringConfig,
@@ -929,10 +961,10 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
     efficiencyFairness: 0.5,
   }));
   const presets: ReadonlyArray<[string, string, ScoringPreset]> = [
-    ["✨", "Баланс", "balanced"],
-    ["💸", "Подешевле", "cheapest"],
-    ["⚖️", "Справедливо", "fairest"],
-    ["⏱", "Больше времени вместе", "more-time"],
+    ["✨", t("scoring.balanced"), "balanced"],
+    ["💸", t("scoring.cheapest"), "cheapest"],
+    ["⚖️", t("scoring.fairest"), "fairest"],
+    ["⏱", t("scoring.moreTime"), "more-time"],
   ];
   const apply = (next: ScoringConfig) => {
     setState((current) => ({ ...current, draft: next, applied: next }));
@@ -944,7 +976,7 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
     );
   return (
     <details className="scoring-panel">
-      <summary>Что для вас важнее?</summary>
+      <summary>{t("scoring.summary")}</summary>
       <div className="preset-row">
         {presets.map(([mark, name, preset]) => (
           <button
@@ -962,11 +994,11 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
       </div>
       <div className="advanced-slider">
         <div>
-          <span>Экономия</span>
-          <span>Комфорт</span>
+          <span>{t("scoring.economy")}</span>
+          <span>{t("scoring.comfort")}</span>
         </div>
         <input
-          aria-label="Экономия или комфорт"
+          aria-label={t("scoring.economyComfort")}
           type="range"
           min="0"
           max="1"
@@ -984,11 +1016,11 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
       </div>
       <div className="advanced-slider">
         <div>
-          <span>Эффективность</span>
-          <span>Справедливость</span>
+          <span>{t("scoring.efficiency")}</span>
+          <span>{t("scoring.fairness")}</span>
         </div>
         <input
-          aria-label="Эффективность или справедливость"
+          aria-label={t("scoring.efficiencyFairness")}
           type="range"
           min="0"
           max="1"
@@ -1006,16 +1038,17 @@ function ScoringPanel({ id, view }: { id: string; view: TripView }) {
       </div>
       <small>
         {mutation.isError
-          ? "Не удалось обновить веса — попробуйте ещё раз"
+          ? t("scoring.error")
           : mutation.isPending
-            ? "Обновляем порядок…"
-            : "Без нового поиска маршрутов"}
+            ? t("scoring.updating")
+            : t("scoring.local")}
       </small>
     </details>
   );
 }
 
 function AiQuestionBox({ id, view }: { id: string; view: TripView }) {
+  const { t, i18n } = useTranslation();
   const [question, setQuestion] = useState("");
   const [input, setInput] = useState<
     Parameters<typeof useExplanation>[1] | undefined
@@ -1025,12 +1058,13 @@ function AiQuestionBox({ id, view }: { id: string; view: TripView }) {
     event.preventDefault();
     const first = view.destinations[0];
     if (!first) return;
-    const normalized = question.toLocaleLowerCase("ru");
+    const locale = i18n.resolvedLanguage === "ru" ? "ru" : "en";
+    const questionType = classifyNaturalQuestion(question, locale);
     const second = view.destinations[1];
     setInput(
-      normalized.includes("сравн") && second
+      questionType === "compare" && second
         ? { type: "compare", cityA: first.city.id, cityB: second.city.id }
-        : normalized.includes("измен") || normalized.includes("если")
+        : questionType === "counterfactual"
           ? { type: "counterfactual", cityId: first.city.id }
           : { type: "why", cityId: first.city.id },
     );
@@ -1038,27 +1072,25 @@ function AiQuestionBox({ id, view }: { id: string; view: TripView }) {
   return (
     <section className="ai-question-box">
       <form onSubmit={ask}>
-        <label htmlFor={`question-${id}`}>Спросить про варианты</label>
+        <label htmlFor={`question-${id}`}>{t("ai.label")}</label>
         <div>
           <input
             id={`question-${id}`}
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Например: почему первый город лучше?"
+            placeholder={t("ai.placeholder")}
             maxLength={500}
           />
           <button className="secondary-button" disabled={!question.trim()}>
-            Спросить
+            {t("ai.ask")}
           </button>
         </div>
       </form>
-      {explanation.isFetching && (
-        <p role="status">Сверяем рассчитанные факты…</p>
-      )}
+      {explanation.isFetching && <p role="status">{t("ai.loading")}</p>}
       {explanation.data && <p>{explanation.data.text}</p>}
       {explanation.isError && (
         <p className="form-error" role="alert">
-          Не удалось ответить. Попробуйте переформулировать вопрос.
+          {t("ai.error")}
         </p>
       )}
     </section>
@@ -1066,6 +1098,7 @@ function AiQuestionBox({ id, view }: { id: string; view: TripView }) {
 }
 
 export function DestinationPage() {
+  const { t } = useTranslation();
   const id = useTripId();
   const { cityId } = useParams();
   const { data: view, isLoading, error } = useTrip(id);
@@ -1083,25 +1116,26 @@ export function DestinationPage() {
         <div className="hero-score">
           <span>#{item.rank}</span>
           <strong>{item.score}</strong>
-          <small>совпадение</small>
+          <small>{t("detail.match")}</small>
         </div>
         <h1>{item.city.name}</h1>
         <p className="lead">
-          Здесь у группы получается провести вместе{" "}
-          {formatDuration(item.commonTimeMinutes)} — с ровной нагрузкой на
-          каждого.
+          {t("detail.lead", {
+            duration: formatDuration(item.commonTimeMinutes),
+          })}
         </p>
         <ScoreBreakdown scores={item.components} />
         <ExplanationPanel query={explanation} />
-        <h2>Как добираемся</h2>
+        <h2>{t("detail.routes")}</h2>
         <div className="route-list">
           {item.routes.map((route, index) => (
             <article key={route.participantId}>
               <span>
                 {view.participants.find((p) => p.id === route.participantId)
-                  ?.displayName ?? `Участник ${index + 1}`}
+                  ?.displayName ??
+                  t("detail.participant", { count: index + 1 })}
               </span>
-              <strong>{TRANSPORT_MODE_LABELS[route.mode]}</strong>
+              <strong>{t(TRANSPORT_MODE_LABEL_KEYS[route.mode])}</strong>
               <p>
                 {formatDateTime(route.outboundDepartureAt)} →{" "}
                 {formatDateTime(route.outboundArrivalAt)}
@@ -1111,15 +1145,14 @@ export function DestinationPage() {
           ))}
         </div>
         <HotelOptions hotels={item.hotels} />
-        <p className="privacy-footnote">
-          Личные бюджеты и ограничения участников не раскрываются.
-        </p>
+        <p className="privacy-footnote">{t("detail.privacy")}</p>
       </main>
     </AppFrame>
   );
 }
 
 export function ComparePage() {
+  const { t } = useTranslation();
   const id = useTripId();
   const { data: view, isLoading, error } = useTrip(id);
   const cityA = view?.destinations[0]?.city.id;
@@ -1131,19 +1164,17 @@ export function ComparePage() {
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   return (
-    <AppFrame title="Сравнение" back tripId={id}>
+    <AppFrame title={t("compare.title")} back tripId={id}>
       <main className="compare-page">
-        <p className="eyebrow">На одном экране</p>
-        <h1>Чем отличаются</h1>
+        <p className="eyebrow">{t("compare.eyebrow")}</p>
+        <h1>{t("compare.heading")}</h1>
         {view.destinations.length < 2 ? (
           <section className="empty-state compare-empty">
             <span aria-hidden="true">⇄</span>
-            <h2>Сравнивать пока нечего</h2>
-            <p>
-              Здесь появятся отличия, когда будут рассчитаны хотя бы два города.
-            </p>
+            <h2>{t("compare.empty")}</h2>
+            <p>{t("compare.emptyHint")}</p>
             <Link className="primary-button as-link" to={`/trips/${id}/live`}>
-              К обзору поездки
+              {t("compare.back")}
             </Link>
           </section>
         ) : (
@@ -1151,7 +1182,7 @@ export function ComparePage() {
             <div
               className="compare-table"
               role="table"
-              aria-label="Сравнение городов"
+              aria-label={t("compare.table")}
               style={
                 {
                   "--compare-columns": view.destinations.length,
@@ -1159,7 +1190,7 @@ export function ComparePage() {
               }
             >
               <div className="compare-row compare-row--head" role="row">
-                <span role="columnheader">Город</span>
+                <span role="columnheader">{t("compare.city")}</span>
                 {view.destinations.map((d) => (
                   <strong role="columnheader" key={d.city.id}>
                     {d.city.name}
@@ -1169,7 +1200,9 @@ export function ComparePage() {
               {(["score", "commonTimeMinutes"] as const).map((key) => (
                 <div className="compare-row" role="row" key={key}>
                   <span role="rowheader">
-                    {key === "score" ? "Совпадение" : "Время вместе"}
+                    {key === "score"
+                      ? t("compare.match")
+                      : t("compare.together")}
                   </span>
                   {view.destinations.map((d) => (
                     <b role="cell" key={d.city.id}>
@@ -1181,7 +1214,7 @@ export function ComparePage() {
                 </div>
               ))}
               <div className="compare-row" role="row">
-                <span role="rowheader">Дорога на человека</span>
+                <span role="rowheader">{t("compare.travelCost")}</span>
                 {view.destinations.map((d) => (
                   <b role="cell" key={d.city.id}>
                     {formatRouteCostRange(d.routes)}
@@ -1198,31 +1231,36 @@ export function ComparePage() {
 }
 
 function CounterfactualPanel({ tripId }: { tripId: string }) {
+  const { t } = useTranslation();
   const explanation = useExplanation(tripId, { type: "counterfactual" });
-  return <ExplanationPanel query={explanation} title="Что можно изменить" />;
+  return <ExplanationPanel query={explanation} title={t("explain.change")} />;
 }
 
 function ExplanationPanel({
   query,
-  title = "Почему так",
+  title,
 }: {
   query: ReturnType<typeof useExplanation>;
   title?: string;
 }) {
+  const { t } = useTranslation();
+  const resolvedTitle = title ?? t("explain.why");
   return (
     <section className="explanation-panel" aria-live="polite">
-      <p className="eyebrow">{title}</p>
+      <p className="eyebrow">{resolvedTitle}</p>
       {query.isLoading ? (
-        <p>Собираем проверяемые факты…</p>
+        <p>{t("explain.loading")}</p>
       ) : query.error ? (
-        <p>Объяснение временно недоступно. Сам рейтинг продолжает работать.</p>
+        <p>{t("explain.error")}</p>
       ) : (
         <p>{query.data?.text}</p>
       )}
       {query.data && (
         <small>
-          Основано на расчёте ·{" "}
-          {query.data.source === "llm" ? "AI-перефразирование" : "без AI"}
+          {t("explain.based")} ·{" "}
+          {query.data.source === "llm"
+            ? t("explain.llm")
+            : t("explain.template")}
         </small>
       )}
     </section>
@@ -1230,6 +1268,7 @@ function ExplanationPanel({
 }
 
 export function ShortlistPage() {
+  const { t } = useTranslation();
   const id = useTripId();
   const { data: view, isLoading, error } = useTrip(id);
   const [selected, setSelected] = useState<string[]>([]);
@@ -1253,19 +1292,13 @@ export function ShortlistPage() {
   if (isLoading) return <Loading />;
   if (error || !view) return <LoadFailed />;
   return (
-    <AppFrame title="Общий выбор" back tripId={id}>
+    <AppFrame title={t("shortlist.title")} back tripId={id}>
       <main className="shortlist-page">
-        <p className="eyebrow">Финальный раунд</p>
-        <h1>Что оставим?</h1>
-        <p className="lead">
-          Выберите до трёх городов. Реакции — это мнение, а не скрытый вес в
-          рейтинге.
-        </p>
+        <p className="eyebrow">{t("shortlist.eyebrow")}</p>
+        <h1>{t("shortlist.heading")}</h1>
+        <p className="lead">{t("shortlist.lead")}</p>
         {view.shortlist.stale && (
-          <p className="muted-note">
-            Условия поездки изменились. Сохраните shortlist заново по свежему
-            рейтингу.
-          </p>
+          <p className="muted-note">{t("shortlist.stale")}</p>
         )}
         {view.destinations.map((d) => (
           <button
@@ -1281,7 +1314,7 @@ export function ShortlistPage() {
                   return current.filter((cityId) => cityId !== d.city.id);
                 }
                 if (current.length >= 3) {
-                  setSelectionError("Можно оставить не больше трёх городов");
+                  setSelectionError(t("shortlist.limit"));
                   return current;
                 }
                 return [...current, d.city.id];
@@ -1295,7 +1328,8 @@ export function ShortlistPage() {
           </button>
         ))}
         <p className="selection-feedback" aria-live="polite">
-          {selectionError || `${selected.length} из 3 выбрано`}
+          {selectionError ||
+            t("shortlist.selected", { count: selected.length })}
         </p>
         {selected[0] &&
           (() => {
@@ -1312,13 +1346,13 @@ export function ShortlistPage() {
             return (
               <div
                 className="reaction-row"
-                aria-label={`Реакции: ${item.city.name}`}
+                aria-label={t("shortlist.reactions", { city: item.city.name })}
               >
                 {(
                   [
-                    ["love", "Нравится"],
-                    ["ok", "Нормально"],
-                    ["dislike", "Не подходит"],
+                    ["love", t("reaction.love")],
+                    ["ok", t("reaction.ok")],
+                    ["dislike", t("reaction.dislike")],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -1344,7 +1378,7 @@ export function ShortlistPage() {
             disabled={!selected.length || shortlist.isPending}
             onClick={() => shortlist.mutate(selected)}
           >
-            {shortlist.isPending ? "Сохраняем…" : "Сохранить общий выбор"}
+            {shortlist.isPending ? t("shortlist.saving") : t("shortlist.save")}
           </button>
         )}
         {"capabilities" in view &&
@@ -1352,8 +1386,8 @@ export function ShortlistPage() {
           selected.length > 0 && (
             <section className="winner-section">
               <fieldset>
-                <legend>Какой город станет итогом?</legend>
-                <p>Выберите один город из общего списка.</p>
+                <legend>{t("shortlist.winner")}</legend>
+                <p>{t("shortlist.winnerHint")}</p>
                 {selected.map((cityId) => {
                   const city = view.destinations.find(
                     (destination) => destination.city.id === cityId,
@@ -1382,7 +1416,7 @@ export function ShortlistPage() {
                   disabled={!winnerId}
                   onClick={() => setConfirming(true)}
                 >
-                  Проверить итоговый выбор
+                  {t("shortlist.review")}
                 </button>
               ) : (
                 <FinalizationConfirmation
@@ -1415,31 +1449,34 @@ export function ShortlistPage() {
 }
 
 export function FinalTripPage() {
+  const { t } = useTranslation();
   const id = useTripId();
   const { data: final, isLoading, error } = useFinalTrip(id);
   if (isLoading) return <Loading />;
   if (error || !final) return <LoadFailed />;
   const route = final.myRoute;
   return (
-    <AppFrame title="Итог поездки" tripId={id} hideTripNav>
+    <AppFrame title={t("final.title")} tripId={id} hideTripNav>
       <main className="final-page">
-        <p className="eyebrow">Решено</p>
+        <p className="eyebrow">{t("final.decided")}</p>
         <div className="final-check">✓</div>
         <h1>{final.city.name}</h1>
         <p className="lead">
-          {formatDuration(final.commonTimeMinutes)} вместе · проверено{" "}
-          {formatDateTime(final.checkedAt)}
+          {t("final.summary", {
+            duration: formatDuration(final.commonTimeMinutes),
+            date: formatDateTime(final.checkedAt),
+          })}
         </p>
         {route && (
           <div className="final-ticket">
             <div>
-              <small>Туда</small>
+              <small>{t("final.outbound")}</small>
               <strong>{formatDate(route.outboundDepartureAt)}</strong>
               <span>{formatTime(route.outboundDepartureAt)}</span>
             </div>
             <i>→</i>
             <div>
-              <small>Обратно</small>
+              <small>{t("final.return")}</small>
               <strong>{formatDate(route.returnDepartureAt)}</strong>
               <span>{formatTime(route.returnDepartureAt)}</span>
             </div>
@@ -1447,8 +1484,8 @@ export function FinalTripPage() {
         )}
         {route ? (
           <section className="personal-route">
-            <p className="eyebrow">Твой маршрут</p>
-            <strong>{TRANSPORT_MODE_LABELS[route.mode]}</strong>
+            <p className="eyebrow">{t("final.yourRoute")}</p>
+            <strong>{t(TRANSPORT_MODE_LABEL_KEYS[route.mode])}</strong>
             <span>
               {formatDateTime(route.outboundDepartureAt)} →{" "}
               {formatDateTime(route.outboundArrivalAt)}
@@ -1465,7 +1502,7 @@ export function FinalTripPage() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Билет туда на Туту
+                {t("final.outboundTicket")}
               </a>
             )}
             {route.returnBookingUrl && (
@@ -1475,22 +1512,19 @@ export function FinalTripPage() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Билет обратно на Туту
+                {t("final.returnTicket")}
               </a>
             )}
           </section>
         ) : (
           <section className="personal-route">
-            <p className="eyebrow">Твой маршрут</p>
-            <p className="muted-note">
-              Вы не указали предпочтения до финала — личного маршрута нет. Город
-              и отель актуальны для группы.
-            </p>
+            <p className="eyebrow">{t("final.yourRoute")}</p>
+            <p className="muted-note">{t("final.noRoute")}</p>
           </section>
         )}
         {final.hotel ? (
           <section className="hotel-options">
-            <p className="eyebrow">Где остановиться</p>
+            <p className="eyebrow">{t("hotel.heading")}</p>
             <article>
               <div>
                 <strong>{final.hotel.name}</strong>
@@ -1504,8 +1538,10 @@ export function FinalTripPage() {
             </article>
             {final.hotelAssumption && (
               <p className="muted-note">
-                Расчёт на {final.hotelAssumption.guests} гостей ·{" "}
-                {final.hotelAssumption.rooms} комн. · стоимость делится поровну
+                {t("hotel.assumption", {
+                  guests: final.hotelAssumption.guests,
+                  rooms: final.hotelAssumption.rooms,
+                })}
               </p>
             )}
             {final.hotel.bookingUrl && (
@@ -1515,22 +1551,19 @@ export function FinalTripPage() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Открыть отель на Туту
+                {t("hotel.open")}
               </a>
             )}
           </section>
         ) : null}
-        <p className="muted-note">
-          Цена и наличие не меняют зафиксированный выбор автоматически.
-          Подтвердите их на Туту перед оплатой.
-        </p>
-        <h2>Почему это честно</h2>
+        <p className="muted-note">{t("hotel.disclaimer")}</p>
+        <h2>{t("final.fair")}</h2>
         <ScoreBreakdown scores={final.components} compact />
         <Link
           className="primary-button as-link"
           to={`/trips/${id}/cities/${final.city.id}`}
         >
-          Все детали поездки
+          {t("final.details")}
         </Link>
       </main>
     </AppFrame>
@@ -1542,11 +1575,11 @@ function HotelOptions({
 }: {
   hotels: TripView["destinations"][number]["hotels"];
 }) {
-  if (!hotels.length)
-    return <p className="muted-note">Отели для этих дат не найдены.</p>;
+  const { t } = useTranslation();
+  if (!hotels.length) return <p className="muted-note">{t("hotel.none")}</p>;
   return (
     <section className="hotel-options">
-      <p className="eyebrow">Где остановиться</p>
+      <p className="eyebrow">{t("hotel.heading")}</p>
       {hotels.slice(0, 3).map((hotel) => (
         <article key={hotel.id}>
           <div>
@@ -1572,44 +1605,41 @@ function EmptyState({
   retrying?: boolean;
   onRetry?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="empty-state">
       <span>{failed ? "!" : "↻"}</span>
-      <h3>
-        {failed ? "Не удалось пересчитать" : "Нет варианта без компромиссов"}
-      </h3>
-      <p>
-        {failed
-          ? "Предыдущие условия сохранены."
-          : "Попробуйте увеличить бюджет или сократить обязательное время вместе."}
-      </p>
+      <h3>{failed ? t("empty.failed") : t("empty.noCompromise")}</h3>
+      <p>{failed ? t("empty.saved") : t("empty.suggestion")}</p>
       {onRetry && (
         <button
           className="secondary-button"
           disabled={retrying}
           onClick={onRetry}
         >
-          {retrying ? "Запускаем…" : "Пересчитать ещё раз"}
+          {retrying ? t("empty.retrying") : t("empty.retry")}
         </button>
       )}
     </section>
   );
 }
 function Loading() {
+  const { t } = useTranslation();
   return (
     <div className="loading-page" role="status">
       <span />
-      <p>Собираем поездку…</p>
+      <p>{t("loading.trip")}</p>
     </div>
   );
 }
 function LoadFailed() {
+  const { t } = useTranslation();
   return (
     <div className="loading-page" role="alert">
       <span>!</span>
-      <p>Не удалось загрузить поездку. Попробуйте ещё раз</p>
+      <p>{t("loading.error")}</p>
       <button className="secondary-button" onClick={() => location.reload()}>
-        Загрузить снова
+        {t("loading.reload")}
       </button>
     </div>
   );
@@ -1630,6 +1660,7 @@ function FinalizationConfirmation({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section
       className="finalization-confirmation"
@@ -1637,24 +1668,27 @@ function FinalizationConfirmation({
       tabIndex={-1}
       aria-labelledby="finalization-title"
     >
-      <h2 id="finalization-title">Зафиксировать {cityName}?</h2>
-      <p>Поездка перейдёт к итогам для всей группы.</p>
+      <h2 id="finalization-title">
+        {t("finalize.heading", { city: cityName })}
+      </h2>
+      <p>{t("finalize.description")}</p>
       {error && (
         <p className="form-error" role="alert">
-          Не удалось зафиксировать город. Проверьте соединение и попробуйте ещё
-          раз.
+          {t("finalize.error")}
         </p>
       )}
       <div>
         <button className="secondary-button" onClick={onCancel}>
-          Вернуться к выбору
+          {t("finalize.cancel")}
         </button>
         <button
           className="primary-button"
           disabled={pending}
           onClick={onConfirm}
         >
-          {pending ? "Фиксируем…" : `Зафиксировать ${cityName}`}
+          {pending
+            ? t("finalize.pending")
+            : t("finalize.submit", { city: cityName })}
         </button>
       </div>
     </section>
@@ -1698,14 +1732,7 @@ function optionalIso(value: FormDataEntryValue | null): string | null {
 }
 
 function statusLabel(status: TripPublic["status"]): string {
-  return {
-    CREATED: "Создана",
-    COLLECTING: "Собираем участников",
-    LIVE: "Идёт выбор",
-    SHORTLIST: "Финальный выбор",
-    FINALIZED: "Маршрут выбран",
-    CANCELLED: "Отменена",
-  }[status];
+  return i18n.t(`status.${status}`);
 }
 
 async function copyInvite(value: string): Promise<void> {

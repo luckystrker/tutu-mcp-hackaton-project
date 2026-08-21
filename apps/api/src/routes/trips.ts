@@ -23,6 +23,7 @@ import type { ActorAuthenticator } from "../auth/session-service.js";
 import type { TripService } from "../application/trip-service.js";
 import { createRateLimiter } from "../rate-limit.js";
 import type { InMemoryCollaborationMetrics } from "../observability/collaboration-metrics.js";
+import { requestLocale } from "../localization.js";
 
 const ParamsSchema = z.strictObject({ tripId: EntityIdSchema });
 const ReactionParamsSchema = ParamsSchema.extend({ cityId: EntityIdSchema });
@@ -92,6 +93,7 @@ export const tripRoutes: FastifyPluginAsync<{
         await options.authenticator.authenticate(request.headers),
         tripId,
         ExplainInputSchema.parse(request.body),
+        requestLocale(request.headers),
       ),
     );
   });

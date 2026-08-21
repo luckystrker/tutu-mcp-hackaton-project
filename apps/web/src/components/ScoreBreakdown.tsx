@@ -1,11 +1,12 @@
 import type { ScoreBreakdown as Scores } from "@rendezvous/contracts";
+import { useTranslation } from "react-i18next";
 
-const labels: Record<keyof Scores, string> = {
-  together: "Время вместе",
-  cost: "Стоимость",
-  travel: "Дорога",
-  synchronization: "Синхронность",
-  fairness: "Справедливость",
+const labelKeys: Record<keyof Scores, string> = {
+  together: "score.together",
+  cost: "score.cost",
+  travel: "score.travel",
+  synchronization: "score.synchronization",
+  fairness: "score.fairness",
 };
 
 export function ScoreBreakdown({
@@ -15,17 +16,18 @@ export function ScoreBreakdown({
   scores: Scores;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`score-breakdown ${compact ? "score-breakdown--compact" : ""}`}
     >
-      {(Object.keys(labels) as Array<keyof Scores>).map((key) => (
+      {(Object.keys(labelKeys) as Array<keyof Scores>).map((key) => (
         <div className="score-row" key={key}>
-          <span>{labels[key]}</span>
+          <span>{t(labelKeys[key])}</span>
           <div
             className="score-track"
             role="progressbar"
-            aria-label={labels[key]}
+            aria-label={t(labelKeys[key])}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(scores[key])}

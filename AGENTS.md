@@ -16,6 +16,8 @@ travelling from different origins. It is a TypeScript npm-workspaces monorepo:
 - `packages/contracts` — shared Zod schemas and public DTO/event contracts.
 - `packages/domain` — city catalog, trip/participant invariants, candidate
   generation, and deterministic fixtures.
+- `packages/i18n` — shared `en`/`ru` locale types, BCP 47 normalization, and
+  deterministic locale resolution used by web and API.
 - `packages/solver` — deterministic feasibility, Pareto pruning, scoring,
   fairness, ranking, rescore, compare, and counterfactual logic.
 - `packages/tutu` — the only boundary around raw Tutu MCP tools and responses;
@@ -86,6 +88,28 @@ runs them without file parallelism. Playwright expects the app at
   job/result handling and finalization idempotency intact.
 - Treat money and timestamps using the existing contracts and numeric policy;
   do not introduce floating-point shortcuts into scoring or persistence.
+
+## Localization invariants
+
+- English is the fallback locale. Initial selection is saved device preference
+  → Telegram `language_code` → browser language → English.
+- The manual choice lives only under `rendezvous.locale.v1` in local storage.
+  Locale is presentation state: never persist it in trips, users, workflow jobs,
+  revisions, or solver results.
+- Put all system-facing web copy and accessibility labels in the typed
+  `apps/web/src/i18n/resources.ts` resources. Keep English and Russian keys in
+  parity; `npm run lint` enforces the production UI Cyrillic boundary.
+- Send the active locale through `Accept-Language` for REST, authentication,
+  explanations, and SSE. Localize safe client errors at the HTTP boundary; do
+  not expose raw provider, validation, or internal error messages.
+- Localize owned catalog city names and generated system content. Never
+  translate user-authored trip titles, display names, free-form preferences, or
+  provider-owned hotel/carrier names.
+- Date formatting is deliberately locale-independent: always `dd.mm.yyyy`,
+  `dd.mm.yyyy hh:mm`, and `hh:mm`. Currency, duration, plural forms, labels, and
+  sorting may follow the active locale.
+- Changing language must not mutate a trip, increment a revision, recompute a
+  result, or call Tutu MCP. Invalidate only locale-dependent presentation data.
 
 ## Change guidelines
 

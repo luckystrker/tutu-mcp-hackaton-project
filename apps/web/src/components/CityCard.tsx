@@ -1,5 +1,6 @@
 import type { DestinationResultDto } from "@rendezvous/contracts";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { formatDuration, formatMoney } from "../lib/formatting.js";
 
 export function CityCard({
@@ -19,6 +20,7 @@ export function CityCard({
   onReact?: (value: "love" | "ok" | "dislike" | null) => void;
   reactionPending?: boolean;
 }) {
+  const { t } = useTranslation();
   const delta =
     previousScore === undefined ? 0 : destination.score - previousScore;
   return (
@@ -40,22 +42,24 @@ export function CityCard({
       </div>
       <div className="city-card__facts">
         <span>
-          вместе <b>{formatDuration(destination.commonTimeMinutes)}</b>
+          {t("city.together")}{" "}
+          <b>{formatDuration(destination.commonTimeMinutes)}</b>
         </span>
         <span>
-          от <b>{formatMoney(destination.routes[0]?.estimatedCost)}</b>
+          {t("city.from")}{" "}
+          <b>{formatMoney(destination.routes[0]?.estimatedCost)}</b>
         </span>
       </div>
       {destination.degraded && (
-        <p className="degraded-label">Неполные данные</p>
+        <p className="degraded-label">{t("city.incomplete")}</p>
       )}
       {onReact && (
-        <div className="card-reactions" aria-label="Реакции на город">
+        <div className="card-reactions" aria-label={t("city.reactions")}>
           {(
             [
-              ["love", "Хочу"],
-              ["ok", "Ок"],
-              ["dislike", "Нет"],
+              ["love", t("reaction.love.short")],
+              ["ok", t("reaction.ok.short")],
+              ["dislike", t("reaction.dislike.short")],
             ] as const
           ).map(([value, label]) => {
             const selected = destination.reactions?.mine === value;
@@ -77,14 +81,14 @@ export function CityCard({
       <div className="city-card__actions">
         {onSelect && (
           <button className="select-city" onClick={onSelect}>
-            {active ? "На схеме" : "Показать"}
+            {active ? t("city.onDiagram") : t("city.show")}
           </button>
         )}
         <Link
           className="text-link"
           to={`/trips/${tripId}/cities/${destination.city.id}`}
         >
-          Почему этот город <span>→</span>
+          {t("city.why")} <span>→</span>
         </Link>
       </div>
     </article>

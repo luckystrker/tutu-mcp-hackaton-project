@@ -7,6 +7,6 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "references": [{ "path": "../contracts" }],
+  "references": [{ "path": "../contracts" }, { "path": "../i18n" }],
   "include": ["src/**/*.ts", "data/**/*.json"]
 }

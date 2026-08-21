@@ -32,6 +32,19 @@ npm run dev
 
 Frontend доступен на `http://localhost:5173`, API — на `http://localhost:3000`. Vite проксирует `/api` и `/health` в API.
 
+### Язык интерфейса
+
+Интерфейс и системные ответы доступны на английском и русском. При первом
+запуске язык выбирается в порядке: сохранённая настройка устройства → Telegram
+`language_code` → язык браузера → английский. Изменить его без перезагрузки
+можно на экране `/settings`; выбор хранится только в `localStorage` текущего
+устройства и не меняет данные поездки.
+
+Пользовательский текст (название поездки, имена и пожелания) не переводится.
+Названия городов каталога, ошибки и системные объяснения локализуются. Во всех
+языках даты отображаются одинаково: `dd.mm.yyyy`, дата и время —
+`dd.mm.yyyy hh:mm`.
+
 Проверить готовность API можно через `GET /health/live` и `GET /health/ready`,
 текущие технические метрики — через `GET /metrics`.
 
@@ -112,6 +125,7 @@ apps/web             React/Vite Mini App
 apps/api             Fastify REST/SSE API, Postgres и Mastra workflow
 packages/contracts   общие Zod-схемы и DTO
 packages/domain      каталог городов, инварианты и генератор кандидатов
+packages/i18n        общие locale-типы, нормализация и выбор языка
 packages/solver      deterministic feasibility, scoring и ranking
 packages/tutu        нормализация, cache и resilience для Tutu MCP
 infra                локальный PostgreSQL и SQL migrations

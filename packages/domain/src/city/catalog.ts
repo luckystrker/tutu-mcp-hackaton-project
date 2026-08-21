@@ -1,6 +1,7 @@
 import { CitySchema, type City } from "@rendezvous/contracts";
 import { z } from "zod";
 import catalogJson from "../../data/cities.v1.json" with { type: "json" };
+import { configureCityLocalization } from "./localization.js";
 
 export const CITY_CATALOG_VERSION = "cities-v1.0.0";
 const CityCatalogSchema = z.array(CitySchema).min(100).max(200);
@@ -37,6 +38,7 @@ export function validateCityCatalog(input: unknown): readonly City[] {
 }
 
 export const CITY_CATALOG = validateCityCatalog(catalogJson);
+configureCityLocalization(CITY_CATALOG);
 export const CITY_BY_ID: ReadonlyMap<string, City> = new Map(
   CITY_CATALOG.map((city) => [city.id, city]),
 );

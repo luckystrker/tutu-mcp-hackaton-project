@@ -9,9 +9,18 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { AppProviders } from "../app/providers.js";
 import { DEMO_TRIP_IDS, FixtureRendezvousApi } from "../demo/fixtures.js";
+import i18n from "../i18n/index.js";
 import {
   FinalTripPage,
   ComparePage,
@@ -25,7 +34,9 @@ import {
   TripsPage,
 } from "./TripPages.js";
 
+beforeAll(() => i18n.changeLanguage("ru"));
 afterEach(cleanup);
+afterAll(() => i18n.changeLanguage("en"));
 
 describe("core trip pages", () => {
   it("keeps previous ranking visible while recompute is running", async () => {
@@ -38,7 +49,7 @@ describe("core trip pages", () => {
     ).toBeTruthy();
     expect(
       await screen.findByText(
-        "Катя сделала Ярославль более сбалансированным вариантом.",
+        "После ответа участника Катя вариант «Ярославль» стал более сбалансированным.",
       ),
     ).toBeTruthy();
     expect(document.querySelector(".score-change")).toBeTruthy();

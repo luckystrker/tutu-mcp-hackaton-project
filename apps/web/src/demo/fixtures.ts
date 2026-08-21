@@ -16,6 +16,7 @@ import {
 import type { RendezvousApi, TripView } from "../features/trips/api.js";
 import { DEMO_PARTICIPANTS } from "@rendezvous/domain/fixtures";
 import { DEMO_TRIP_IDS } from "./ids.js";
+import { currentLocale } from "../i18n/index.js";
 export { DEMO_TRIP_IDS } from "./ids.js";
 
 const participantIds = [
@@ -30,6 +31,16 @@ const cityIds = [
   "42100000-0000-4000-8000-000000000002",
   "42100000-0000-4000-8000-000000000003",
 ] as const;
+const fixtureCityNames = {
+  [cityIds[0]]: { en: "Kazan", ru: "Казань" },
+  [cityIds[1]]: { en: "Nizhny Novgorod", ru: "Нижний Новгород" },
+  [cityIds[2]]: { en: "Yaroslavl", ru: "Ярославль" },
+} as const;
+const DEMO_TRIP_TITLE_MARKER = "%%demo:trip-title%%";
+const DEMO_TRIP_TITLES = {
+  en: "September escape",
+  ru: "Сентябрьский побег",
+} as const;
 const now = "2026-09-01T12:00:00.000Z";
 
 const destinations: readonly DestinationResultDto[] = [
@@ -101,7 +112,7 @@ function makeView(
   return TripOrganizerDtoSchema.parse({
     trip: {
       id,
-      title: "Сентябрьский побег",
+      title: DEMO_TRIP_TITLE_MARKER,
       expectedParticipants: 4,
       status: options.status ?? "LIVE",
       computeStatus: options.computeStatus ?? "idle",
@@ -201,14 +212,23 @@ export class FixtureRendezvousApi implements RendezvousApi {
     await fixtureDelay();
     return [...this.#views.values()]
       .map(({ trip }) => TripOrganizerDtoSchema.shape.trip.parse(trip))
+      .map((trip) =>
+        trip.title === DEMO_TRIP_TITLE_MARKER
+          ? { ...trip, title: DEMO_TRIP_TITLES[currentLocale()] }
+          : trip,
+      )
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
-  async getTrip(id: string): Promise<TripView> {
+  async #rawTrip(id: string): Promise<TripOrganizerDto> {
     await fixtureDelay();
     return TripOrganizerDtoSchema.parse(
       this.#views.get(id) ?? FIXTURE_TRIPS[DEMO_TRIP_IDS.live],
     );
+  }
+
+  async getTrip(id: string): Promise<TripView> {
+    return localizeFixtureView(await this.#rawTrip(id));
   }
 
   async getFinal(id: string): Promise<FinalTripDto> {
@@ -244,7 +264,10 @@ export class FixtureRendezvousApi implements RendezvousApi {
       return ExplainResponseSchema.parse({
         source: "template",
         factsVersion: "explanation-facts-v1",
-        text: "Попробуйте немного увеличить доступное время вместе.",
+        text:
+          currentLocale() === "ru"
+            ? "Попробуйте немного увеличить доступное время вместе."
+            : "Try slightly increasing the available time together.",
         facts: { type: "counterfactual", city: null, changes: [] },
       });
     const cityId = input.type === "why" ? input.cityId : input.cityA;
@@ -259,7 +282,10 @@ export class FixtureRendezvousApi implements RendezvousApi {
     return ExplainResponseSchema.parse({
       source: "template",
       factsVersion: "explanation-facts-v1",
-      text: `${city.city.name} даёт группе хороший баланс времени и дороги.`,
+      text:
+        currentLocale() === "ru"
+          ? `${city.city.name} даёт группе хороший баланс времени и дороги.`
+          : `${city.city.name} gives the group a good balance of time together and travel.`,
       facts: {
         type: input.type,
         city: city.city,
@@ -277,11 +303,11 @@ export class FixtureRendezvousApi implements RendezvousApi {
   }
 
   async retryComputation(id: string): Promise<TripView> {
-    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    const view = structuredClone(await this.#rawTrip(id));
     view.trip.revision += 1;
     view.trip.computeStatus = "running";
     this.#views.set(id, view);
-    return TripOrganizerDtoSchema.parse(view);
+    return this.getTrip(id);
   }
 
   async getInvite(id: string) {
@@ -311,26 +337,26 @@ export class FixtureRendezvousApi implements RendezvousApi {
     id: string,
     input: UpdatePreferencesInput,
   ): Promise<TripView> {
-    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    const view = structuredClone(await this.#rawTrip(id));
     view.me = { ...view.me, ...input, updatedAt: new Date().toISOString() };
     this.#views.set(id, view);
-    return TripOrganizerDtoSchema.parse(view);
+    return this.getTrip(id);
   }
 
   async updateScoring(id: string, scoring: ScoringConfig): Promise<TripView> {
-    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    const view = structuredClone(await this.#rawTrip(id));
     view.trip.scoringConfig = scoring;
     view.trip.rankingVersion += 1;
     view.destinations = view.destinations
       .map((item) => ({ ...item, score: weightedScore(item, scoring) }))
       .sort((left, right) => right.score - left.score)
-      .map((item, index) => ({ ...item, rank: index + 1 }));
+      .map((item, rank) => ({ ...item, rank: rank + 1 }));
     this.#views.set(id, view);
-    return TripOrganizerDtoSchema.parse(view);
+    return this.getTrip(id);
   }
 
   async setReaction(id: string, input: SetReactionInput): Promise<TripView> {
-    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    const view = structuredClone(await this.#rawTrip(id));
     const destination = view.destinations.find(
       ({ city }) => city.id === input.cityId,
     );
@@ -348,11 +374,11 @@ export class FixtureRendezvousApi implements RendezvousApi {
       destination.reactions = current;
     }
     this.#views.set(id, view);
-    return TripOrganizerDtoSchema.parse(view);
+    return this.getTrip(id);
   }
 
   async deleteReaction(id: string, cityId: string): Promise<TripView> {
-    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    const view = structuredClone(await this.#rawTrip(id));
     const destination = view.destinations.find(
       ({ city }) => city.id === cityId,
     );
@@ -362,7 +388,7 @@ export class FixtureRendezvousApi implements RendezvousApi {
       current.mine = null;
     }
     this.#views.set(id, view);
-    return TripOrganizerDtoSchema.parse(view);
+    return this.getTrip(id);
   }
 
   subscribeToTrip(id: string, onEvent: () => void): () => void {
@@ -394,7 +420,7 @@ export class FixtureRendezvousApi implements RendezvousApi {
     id: string,
     cityIds: readonly string[],
   ): Promise<TripView> {
-    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    const view = structuredClone(await this.#rawTrip(id));
     view.trip.status = "SHORTLIST";
     view.shortlist = {
       cityIds: [...cityIds],
@@ -407,14 +433,14 @@ export class FixtureRendezvousApi implements RendezvousApi {
     view.capabilities.canShortlist = false;
     view.capabilities.canFinalize = true;
     this.#views.set(id, view);
-    return TripOrganizerDtoSchema.parse(view);
+    return this.getTrip(id);
   }
 
   async finalize(
     id: string,
     destinationResultId: string,
   ): Promise<FinalTripDto> {
-    const view = structuredClone(await this.getTrip(id)) as TripOrganizerDto;
+    const view = structuredClone(await this.#rawTrip(id));
     const selected = view.destinations.find(
       ({ resultId }) => resultId === destinationResultId,
     );
@@ -440,4 +466,48 @@ function weightedScore(item: DestinationResultDto, scoring: ScoringConfig) {
 
 function fixtureDelay(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 80));
+}
+
+function localizeFixtureView(view: TripOrganizerDto): TripOrganizerDto {
+  const locale = currentLocale();
+  const participantNames =
+    locale === "ru"
+      ? ["Данил", "Саша", "Катя", "Маша"]
+      : ["Dan", "Alex", "Kate", "Masha"];
+  return {
+    ...view,
+    trip: {
+      ...view.trip,
+      title:
+        view.trip.title === DEMO_TRIP_TITLE_MARKER
+          ? DEMO_TRIP_TITLES[locale]
+          : view.trip.title,
+    },
+    participants: view.participants.map((participant, index) => ({
+      ...participant,
+      displayName: participantNames[index] ?? participant.displayName,
+    })),
+    me: { ...view.me, displayName: participantNames[0]! },
+    destinations: view.destinations.map((item) => ({
+      ...item,
+      city: {
+        ...item.city,
+        name:
+          fixtureCityNames[item.city.id as keyof typeof fixtureCityNames]?.[
+            locale
+          ] ?? item.city.name,
+      },
+      hotels: item.hotels.map((hotel, index) => ({
+        ...hotel,
+        name:
+          locale === "ru"
+            ? index === 0
+              ? "Дом у Кремля"
+              : "Городской отель"
+            : index === 0
+              ? "Kremlin House"
+              : "City Hotel",
+      })),
+    })),
+  };
 }

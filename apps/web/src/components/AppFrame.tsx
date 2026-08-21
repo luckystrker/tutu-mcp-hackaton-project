@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 export function AppFrame({
   children,
@@ -18,6 +19,7 @@ export function AppFrame({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const showTripNav = Boolean(tripId && !hideTripNav);
   return (
     <div className={`app-frame ${showTripNav ? "app-frame--with-nav" : ""}`}>
@@ -25,20 +27,28 @@ export function AppFrame({
         <div className="topbar__side topbar__side--left">
           {back ? (
             backTo ? (
-              <Link className="icon-button" to={backTo} aria-label="Назад">
+              <Link
+                className="icon-button"
+                to={backTo}
+                aria-label={t("common.back")}
+              >
                 ←
               </Link>
             ) : (
               <button
                 className="icon-button"
                 onClick={() => navigate(-1)}
-                aria-label="Назад"
+                aria-label={t("common.back")}
               >
                 ←
               </button>
             )
           ) : tripId ? (
-            <Link className="icon-button" to="/trips" aria-label="К поездкам">
+            <Link
+              className="icon-button"
+              to="/trips"
+              aria-label={t("common.trips")}
+            >
               ←
             </Link>
           ) : null}
@@ -55,7 +65,7 @@ export function AppFrame({
             <Link
               className="icon-button"
               to={`/trips/${tripId}/menu`}
-              aria-label="Меню поездки"
+              aria-label={t("common.tripMenu")}
             >
               •••
             </Link>
@@ -64,7 +74,7 @@ export function AppFrame({
       </header>
       {children}
       {showTripNav && tripId && (
-        <nav className="bottom-nav" aria-label="Навигация по поездке">
+        <nav className="bottom-nav" aria-label={t("common.tripMenu")}>
           <TripNavLink
             tripId={tripId}
             path="live"
@@ -73,28 +83,32 @@ export function AppFrame({
               location.pathname.includes("/cities/")
             }
           >
-            <span aria-hidden="true">◎</span>Обзор
+            <span aria-hidden="true">◎</span>
+            {t("common.overview")}
           </TripNavLink>
           <TripNavLink
             tripId={tripId}
             path="compare"
             active={location.pathname.endsWith("/compare")}
           >
-            <span aria-hidden="true">⇄</span>Сравнить
+            <span aria-hidden="true">⇄</span>
+            {t("common.compare")}
           </TripNavLink>
           <TripNavLink
             tripId={tripId}
             path="shortlist"
             active={location.pathname.endsWith("/shortlist")}
           >
-            <span aria-hidden="true">♡</span>Выбор
+            <span aria-hidden="true">♡</span>
+            {t("common.choice")}
           </TripNavLink>
           <TripNavLink
             tripId={tripId}
             path="menu"
             active={location.pathname.endsWith("/menu")}
           >
-            <span aria-hidden="true">☰</span>Ещё
+            <span aria-hidden="true">☰</span>
+            {t("common.more")}
           </TripNavLink>
         </nav>
       )}

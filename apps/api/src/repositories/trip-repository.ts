@@ -1250,7 +1250,7 @@ export class TripRepository {
     const result = await this.database.query<{ user_id: string }>(
       `SELECT p.user_id FROM rendezvous.participants p
        JOIN rendezvous.users u ON u.id=p.user_id
-       WHERE p.trip_id=$1 AND u.display_name LIKE 'Бот %'
+       WHERE p.trip_id=$1 AND (u.display_name LIKE 'Bot %' OR u.display_name LIKE 'Бот %')
          AND NOT EXISTS (
            SELECT 1 FROM rendezvous.reactions r
            WHERE r.trip_id=p.trip_id AND r.user_id=p.user_id

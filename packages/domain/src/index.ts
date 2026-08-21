@@ -2,6 +2,7 @@ export * from "./candidates/generate.js";
 export * from "./candidates/haversine.js";
 export * from "./candidates/normalize.js";
 export * from "./city/catalog.js";
+export * from "./city/localization.js";
 export * from "./errors.js";
 export * from "./fixtures/demo.js";
 export * from "./participant/entities.js";

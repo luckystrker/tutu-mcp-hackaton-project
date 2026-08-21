@@ -24,4 +24,19 @@ describe("natural preference parser", () => {
     expect(parsed).not.toHaveProperty("forbiddenModes");
     expect(parsed).not.toHaveProperty("originCityId");
   });
+
+  it("parses equivalent English preferences", () => {
+    expect(
+      parseNaturalPreference(
+        "Direct, no night travel, morning arrival, nature and food, up to 8 hours",
+        "en",
+      ),
+    ).toEqual({
+      preferDirect: true,
+      avoidNightTravel: true,
+      preferMorningArrival: true,
+      maxTravelHoursPreferred: 8,
+      destinationTags: ["nature", "food"],
+    });
+  });
 });

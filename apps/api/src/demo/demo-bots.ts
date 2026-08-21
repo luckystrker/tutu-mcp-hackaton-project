@@ -3,19 +3,19 @@ import { CITY_CATALOG } from "@rendezvous/domain";
 import type { UpdatePreferencesInput } from "@rendezvous/contracts";
 import type { Actor } from "../application/actor.js";
 
-export const DEMO_BOT_NAME_PREFIX = "Бот";
+export const DEMO_BOT_NAME_PREFIX = "Bot";
 
 const BOT_NAMES = [
-  "Аня",
-  "Марк",
-  "Соня",
-  "Тимур",
-  "Вера",
-  "Егор",
-  "Лера",
-  "Паша",
-  "Ника",
-  "Гриша",
+  "Anna",
+  "Mark",
+  "Sofia",
+  "Timur",
+  "Vera",
+  "Egor",
+  "Lera",
+  "Pavel",
+  "Nika",
+  "Greg",
 ] as const;
 
 const BOT_NAMESPACE = "3f7b8a52-9d1e-4f6a-b5c4-2a8d9e0f1b23";

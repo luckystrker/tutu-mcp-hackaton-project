@@ -16,6 +16,7 @@ import { ApplicationError } from "./errors.js";
 import { projectAggregate, projectSolverOutput } from "./projection.js";
 import type { TripRepository } from "../repositories/trip-repository.js";
 import { ExplanationService } from "./explanation-service.js";
+import type { SupportedLocale } from "@rendezvous/i18n";
 
 export class TripService {
   constructor(
@@ -176,8 +177,13 @@ export class TripService {
     return this.repository.listEventsAfter(actor.userId, tripId, afterId);
   }
 
-  async explain(actor: Actor, tripId: string, input: ExplainInput) {
-    return this.explanations.explain(actor.userId, tripId, input);
+  async explain(
+    actor: Actor,
+    tripId: string,
+    input: ExplainInput,
+    locale: SupportedLocale = "ru",
+  ) {
+    return this.explanations.explain(actor.userId, tripId, input, locale);
   }
 
   private requireKnownCities(cityIds: readonly string[]): void {

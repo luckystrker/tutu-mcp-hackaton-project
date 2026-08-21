@@ -193,6 +193,89 @@ h2 {
   display: grid;
   gap: 10px;
 }
+.settings-page {
+  width: min(100%, 620px);
+  margin-inline: auto;
+  padding-block: 28px;
+}
+.settings-intro {
+  margin-bottom: 32px;
+}
+.language-settings {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.language-settings > legend {
+  padding: 0;
+  font:
+    600 28px "Playfair Display",
+    serif;
+  letter-spacing: -0.03em;
+}
+.language-settings > p {
+  margin: 6px 0 16px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.language-options {
+  display: grid;
+  gap: 10px;
+}
+.language-options label {
+  min-width: 0;
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  cursor: pointer;
+}
+.language-options label.is-selected {
+  border-color: var(--forest);
+  background: #e5eee7;
+}
+.language-options input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.language-options label:has(input:focus-visible) {
+  outline: 3px solid rgba(49, 88, 70, 0.32);
+  outline-offset: 2px;
+}
+.language-options label > span {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--card);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.language-options label > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.language-options label > i {
+  color: var(--forest);
+  font-style: normal;
+  opacity: 0;
+}
+.language-options label.is-selected > i {
+  opacity: 1;
+}
 .home-action {
   min-height: 82px;
   display: grid;

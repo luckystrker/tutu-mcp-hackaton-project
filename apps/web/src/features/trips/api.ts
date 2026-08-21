@@ -24,6 +24,12 @@ import type {
   UpdatePreferencesInput,
 } from "@rendezvous/contracts";
 import { telegramInitData } from "../../telegram/bridge.js";
+import i18n, { currentLocale } from "../../i18n/index.js";
+import {
+  localizeExplanation,
+  localizeFinalTrip,
+  localizeTripView,
+} from "./localize.js";
 
 export type TripView = TripGroupDto | TripOrganizerDto;
 
@@ -62,24 +68,34 @@ export class HttpRendezvousApi implements RendezvousApi {
     return TripListSchema.parse(await this.request("/api/trips"));
   }
   async getTrip(id: string) {
-    return TripViewSchema.parse(await this.request(`/api/trips/${id}`));
+    return localizeTripView(
+      TripViewSchema.parse(await this.request(`/api/trips/${id}`)),
+      currentLocale(),
+    );
   }
   async getFinal(id: string) {
-    return FinalTripDtoSchema.parse(
-      await this.request(`/api/trips/${id}/final`),
+    return localizeFinalTrip(
+      FinalTripDtoSchema.parse(await this.request(`/api/trips/${id}/final`)),
+      currentLocale(),
     );
   }
   async explain(id: string, input: ExplainInput) {
-    return ExplainResponseSchema.parse(
-      await this.request(`/api/trips/${id}/explain`, {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
+    return localizeExplanation(
+      ExplainResponseSchema.parse(
+        await this.request(`/api/trips/${id}/explain`, {
+          method: "POST",
+          body: JSON.stringify(input),
+        }),
+      ),
+      currentLocale(),
     );
   }
   async retryComputation(id: string) {
-    return TripViewSchema.parse(
-      await this.request(`/api/trips/${id}/retry`, { method: "POST" }),
+    return localizeTripView(
+      TripViewSchema.parse(
+        await this.request(`/api/trips/${id}/retry`, { method: "POST" }),
+      ),
+      currentLocale(),
     );
   }
   async getInvite(id: string) {
@@ -96,26 +112,35 @@ export class HttpRendezvousApi implements RendezvousApi {
     );
   }
   async joinTrip(inviteToken: string) {
-    return TripViewSchema.parse(
-      await this.request(`/api/invites/${inviteToken}/join`, {
-        method: "POST",
-      }),
+    return localizeTripView(
+      TripViewSchema.parse(
+        await this.request(`/api/invites/${inviteToken}/join`, {
+          method: "POST",
+        }),
+      ),
+      currentLocale(),
     );
   }
   async updateMyPreferences(id: string, input: UpdatePreferencesInput) {
-    return TripViewSchema.parse(
-      await this.request(`/api/trips/${id}/me/preferences`, {
-        method: "PUT",
-        body: JSON.stringify(input),
-      }),
+    return localizeTripView(
+      TripViewSchema.parse(
+        await this.request(`/api/trips/${id}/me/preferences`, {
+          method: "PUT",
+          body: JSON.stringify(input),
+        }),
+      ),
+      currentLocale(),
     );
   }
   async updateScoring(id: string, input: ScoringConfig) {
-    return TripViewSchema.parse(
-      await this.request(`/api/trips/${id}/scoring`, {
-        method: "PUT",
-        body: JSON.stringify(input),
-      }),
+    return localizeTripView(
+      TripViewSchema.parse(
+        await this.request(`/api/trips/${id}/scoring`, {
+          method: "PUT",
+          body: JSON.stringify(input),
+        }),
+      ),
+      currentLocale(),
     );
   }
   async setReaction(id: string, input: SetReactionInput) {
@@ -139,11 +164,14 @@ export class HttpRendezvousApi implements RendezvousApi {
     return this.getTrip(id);
   }
   async finalize(id: string, destinationResultId: string) {
-    return FinalTripDtoSchema.parse(
-      await this.request(`/api/trips/${id}/finalize`, {
-        method: "POST",
-        body: JSON.stringify({ destinationResultId }),
-      }),
+    return localizeFinalTrip(
+      FinalTripDtoSchema.parse(
+        await this.request(`/api/trips/${id}/finalize`, {
+          method: "POST",
+          body: JSON.stringify({ destinationResultId }),
+        }),
+      ),
+      currentLocale(),
     );
   }
 
@@ -168,6 +196,7 @@ export class HttpRendezvousApi implements RendezvousApi {
           {
             headers: {
               authorization: `Bearer ${session.token}`,
+              "accept-language": currentLocale(),
             },
             signal,
           },
@@ -229,6 +258,7 @@ export class HttpRendezvousApi implements RendezvousApi {
       headers: {
         ...(init.body ? { "content-type": "application/json" } : {}),
         authorization: `Bearer ${session.token}`,
+        "accept-language": currentLocale(),
         ...init.headers,
       },
     });
@@ -258,7 +288,10 @@ export class HttpRendezvousApi implements RendezvousApi {
       `${this.baseUrl}${initData ? "/api/auth/telegram" : "/api/auth/dev"}`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "accept-language": currentLocale(),
+        },
         body: JSON.stringify(
           initData
             ? { initData }
@@ -281,5 +314,5 @@ function browserIdentity() {
   const key = "rendezvous-test-user-id";
   const id = globalThis.localStorage?.getItem(key) ?? crypto.randomUUID();
   globalThis.localStorage?.setItem(key, id);
-  return { id, name: "Пользователь" };
+  return { id, name: i18n.t("identity.defaultName") };
 }

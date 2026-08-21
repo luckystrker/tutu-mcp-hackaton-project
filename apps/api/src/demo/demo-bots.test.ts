@@ -69,7 +69,7 @@ describe("demo bots", () => {
     });
     await bots.tick();
     expect(calls.joined).toHaveLength(1);
-    expect(calls.joined[0]!.displayName).toMatch(/^Бот /);
+    expect(calls.joined[0]!.displayName).toMatch(/^Bot /);
     expect(calls.preferences).toHaveLength(1);
     const input = calls.preferences[0]!.input;
     expect(input.ready).toBe(true);

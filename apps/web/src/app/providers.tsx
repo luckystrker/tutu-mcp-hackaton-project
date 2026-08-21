@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useState, type ReactNode } from "react";
+import { useEffect } from "react";
+import i18n from "../i18n/index.js";
 import {
   HttpRendezvousApi,
   type RendezvousApi,
@@ -23,6 +25,15 @@ export function AppProviders({
   const [defaultApi] = useState<RendezvousApi>(
     () => new HttpRendezvousApi(import.meta.env.VITE_API_BASE_URL ?? ""),
   );
+  useEffect(() => {
+    const invalidateLocalizedData = () => {
+      void queryClient.invalidateQueries();
+    };
+    i18n.on("languageChanged", invalidateLocalizedData);
+    return () => {
+      i18n.off("languageChanged", invalidateLocalizedData);
+    };
+  }, [queryClient]);
   return (
     <ApiContext.Provider value={api ?? defaultApi}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

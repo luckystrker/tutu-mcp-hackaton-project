@@ -12,6 +12,7 @@ import { authRoutes } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { tripRoutes } from "./routes/trips.js";
 import type { InMemoryCollaborationMetrics } from "./observability/collaboration-metrics.js";
+import { localizedErrorMessage, requestLocale } from "./localization.js";
 
 export type AppDependencies = {
   readinessCheck: () => Promise<void>;
@@ -66,10 +67,10 @@ export function buildApp(dependencies: AppDependencies) {
       const origin = request.headers.origin;
       if (origin === dependencies.allowedOrigin) {
         reply.header("access-control-allow-origin", origin);
-        reply.header("vary", "Origin");
+        reply.header("vary", "Origin, Accept-Language");
         reply.header(
           "access-control-allow-headers",
-          "authorization,content-type,last-event-id",
+          "authorization,content-type,last-event-id,accept-language",
         );
         reply.header(
           "access-control-allow-methods",
@@ -80,6 +81,7 @@ export function buildApp(dependencies: AppDependencies) {
     });
   }
   app.addHook("onSend", async (_request, reply, payload) => {
+    if (!reply.hasHeader("vary")) reply.header("vary", "Accept-Language");
     reply.header("x-content-type-options", "nosniff");
     reply.header("referrer-policy", "no-referrer");
     reply.header(
@@ -108,7 +110,14 @@ export function buildApp(dependencies: AppDependencies) {
             ? error.code
             : (CODE_BY_STATUS[statusCode] ?? "REQUEST_FAILED")
           : "INTERNAL_ERROR",
-        message: isClientError ? error.message : "Internal server error",
+        message: localizedErrorMessage(
+          isClientError
+            ? error instanceof ApplicationError
+              ? error.code
+              : (CODE_BY_STATUS[statusCode] ?? "REQUEST_FAILED")
+            : "INTERNAL_ERROR",
+          requestLocale(request.headers),
+        ),
         requestId: request.id,
       },
     });
@@ -119,7 +128,10 @@ export function buildApp(dependencies: AppDependencies) {
     const body = ApiErrorSchema.parse({
       error: {
         code: "NOT_FOUND",
-        message: `Route ${request.method} ${request.url} not found`,
+        message: localizedErrorMessage(
+          "NOT_FOUND",
+          requestLocale(request.headers),
+        ),
         requestId: request.id,
       },
     });

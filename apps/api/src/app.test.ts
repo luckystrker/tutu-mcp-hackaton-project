@@ -70,7 +70,7 @@ describe("health routes", () => {
     expect(response.body).not.toContain("private failure detail");
   });
 
-  it("preserves client error status codes and messages", async () => {
+  it("preserves client error status codes and localizes safe messages", async () => {
     const app = buildApp({ readinessCheck: vi.fn() });
     app.get("/nope", async () => {
       throw Object.assign(new Error("Expected a UUID"), {
@@ -81,7 +81,17 @@ describe("health routes", () => {
     const response = await app.inject({ method: "GET", url: "/nope" });
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
-      error: { code: "BAD_REQUEST", message: "Expected a UUID" },
+      error: { code: "BAD_REQUEST", message: "The request is invalid" },
+    });
+    expect(response.body).not.toContain("Expected a UUID");
+
+    const russianResponse = await app.inject({
+      method: "GET",
+      url: "/nope",
+      headers: { "accept-language": "ru-RU,ru;q=0.9" },
+    });
+    expect(russianResponse.json()).toMatchObject({
+      error: { code: "BAD_REQUEST", message: "Некорректный запрос" },
     });
   });
 
@@ -110,7 +120,7 @@ describe("health routes", () => {
     expect(response.json()).toEqual({
       error: {
         code: "NOT_FOUND",
-        message: "Route GET /definitely-not-a-route not found",
+        message: "The requested item was not found",
         requestId: expect.any(String),
       },
     });
