@@ -14,7 +14,9 @@ test("marked fixture fallback covers the release demo states", async ({
   await expect(page.getByText("Демо-данные", { exact: true })).toBeVisible();
   await expect(page.getByText(/не live-результаты Туту/)).toBeVisible();
   await expect(page.getByText(/2 из 4 готовы/)).toBeVisible();
-  await expect(page.getByText(/3 из 4 готовы/)).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText(/3 из 4 готовы/)).toBeVisible({
+    timeout: 10_000,
+  });
   await expect(page.getByText(/После ответа участника Катя/)).toBeVisible();
   await assertNoHorizontalOverflow(page);
 

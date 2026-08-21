@@ -415,7 +415,7 @@ export class FixtureRendezvousApi implements RendezvousApi {
       ];
       this.#views.set(id, TripOrganizerDtoSchema.parse(view));
       onEvent();
-    }, 900);
+    }, 5000);
     return () => window.clearTimeout(timer);
   }
 

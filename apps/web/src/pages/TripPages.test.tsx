@@ -39,21 +39,29 @@ afterEach(cleanup);
 afterAll(() => i18n.changeLanguage("en"));
 
 describe("core trip pages", () => {
-  it("keeps previous ranking visible while recompute is running", async () => {
-    renderLive(DEMO_TRIP_IDS.running);
-    expect(await screen.findByText("Пересчитываем маршрут")).toBeTruthy();
-    expect(screen.getByText("Предварительный результат · 2 из 4")).toBeTruthy();
-    expect(screen.getAllByText("Казань").length).toBeGreaterThan(0);
-    expect(
-      screen.getByText("Пока показываем предыдущий результат"),
-    ).toBeTruthy();
-    expect(
-      await screen.findByText(
-        "После ответа участника Катя вариант «Ярославль» стал более сбалансированным.",
-      ),
-    ).toBeTruthy();
-    expect(document.querySelector(".score-change")).toBeTruthy();
-  });
+  it(
+    "keeps previous ranking visible while recompute is running",
+    { timeout: 10_000 },
+    async () => {
+      renderLive(DEMO_TRIP_IDS.running);
+      expect(await screen.findByText("Пересчитываем маршрут")).toBeTruthy();
+      expect(
+        screen.getByText("Предварительный результат · 2 из 4"),
+      ).toBeTruthy();
+      expect(screen.getAllByText("Казань").length).toBeGreaterThan(0);
+      expect(
+        screen.getByText("Пока показываем предыдущий результат"),
+      ).toBeTruthy();
+      expect(
+        await screen.findByText(
+          "После ответа участника Катя вариант «Ярославль» стал более сбалансированным.",
+          {},
+          { timeout: 8000 },
+        ),
+      ).toBeTruthy();
+      expect(document.querySelector(".score-change")).toBeTruthy();
+    },
+  );
 
   it("exposes all common trip controls without requiring a period", async () => {
     renderPage("/new", <Route path="/new" element={<CreateTripPage />} />);
