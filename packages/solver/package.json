@@ -6,10 +6,12 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
       "default": "./dist/index.js"
     },
     "./presets": {
       "types": "./dist/presets.d.ts",
+      "development": "./src/presets.ts",
       "default": "./dist/presets.js"
     }
   },
