@@ -26,6 +26,13 @@ export const ApiErrorSchema = z.strictObject({
 });
 
 export const LivenessSchema = z.strictObject({ status: z.literal("ok") });
+export const BuildInfoSchema = z.strictObject({
+  service: z.literal("rendezvous-api"),
+  version: z.string().trim().min(1),
+  commitSha: z.string().trim().min(1),
+  builtAt: IsoDateTimeSchema.nullable(),
+  environment: z.enum(["development", "test", "production"]),
+});
 export const ReadinessSchema = z.discriminatedUnion("status", [
   z.strictObject({
     status: z.literal("ok"),
@@ -42,4 +49,5 @@ export type IsoDateTime = z.infer<typeof IsoDateTimeSchema>;
 export type Money = z.infer<typeof MoneySchema>;
 export type ApiError = z.infer<typeof ApiErrorSchema>;
 export type Liveness = z.infer<typeof LivenessSchema>;
+export type BuildInfo = z.infer<typeof BuildInfoSchema>;
 export type Readiness = z.infer<typeof ReadinessSchema>;

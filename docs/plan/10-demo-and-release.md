@@ -126,6 +126,19 @@ Live Tutu contract suite не должна делать обычный CI flaky:
 - smoke/E2E report;
 - runbook и список известных ограничений.
 
+## Implementation evidence
+
+Repository-owned artifacts live in [`docs/release`](../release/README.md).
+Container topology and the single-API-replica constraint are recorded in
+[`ADR 0006`](../adr/0006-demo-release-topology.md). Automated evidence includes
+the date-relative `demo:dataset` generator, HTTP `demo:preflight`, safe
+`/health/build` metadata, production HTTPS validation, marked fixture fallback
+and the `test:e2e:fixture` CI gate.
+
+The stage is not release-complete until the two human Telegram rehearsals, live
+Tutu preflight, staging migration/rollback and platform configuration rows in
+the release checklist are filled with real evidence.
+
 ## Связь со SPEC
 
 Разделы 52–65, особенно demo scenario и Definition of Done.

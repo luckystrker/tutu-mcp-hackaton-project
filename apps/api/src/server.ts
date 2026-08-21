@@ -90,6 +90,13 @@ const app = buildApp({
     workflow: recomputeMetrics.snapshot(),
     collaboration: collaborationMetrics.snapshot(),
   }),
+  buildInfo: {
+    service: "rendezvous-api",
+    version: config.BUILD_VERSION,
+    commitSha: config.BUILD_SHA,
+    builtAt: config.BUILD_TIME ?? null,
+    environment: config.NODE_ENV,
+  },
   authenticator: sessions,
   sessions,
   allowDevAuth: config.NODE_ENV !== "production",

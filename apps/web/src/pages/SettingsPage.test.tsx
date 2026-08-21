@@ -52,5 +52,8 @@ describe("language settings", () => {
     expect(storage.setItem).toHaveBeenLastCalledWith(LOCALE_STORAGE_KEY, "ru");
     expect(document.documentElement.lang).toBe("ru");
     expect(i18n.resolvedLanguage).toBe("ru");
+    expect(
+      screen.getByRole("heading", { name: "Диагностика сборки" }),
+    ).toBeTruthy();
   });
 });

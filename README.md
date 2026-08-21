@@ -46,7 +46,8 @@ Frontend доступен на `http://localhost:5173`, API — на `http://loc
 `dd.mm.yyyy hh:mm`.
 
 Проверить готовность API можно через `GET /health/live` и `GET /health/ready`,
-текущие технические метрики — через `GET /metrics`.
+текущие технические метрики — через `GET /metrics` напрямую у API (release
+web-прокси метрики наружу не отдаёт).
 
 ### Режимы локальной разработки
 
@@ -117,6 +118,29 @@ TUTU_LIVE_TEST=1 npm run test:live -w @rendezvous/tutu
 
 Последняя команда обращается к живому Tutu MCP и поэтому вынесена из обычного
 набора тестов.
+
+## Демо и release
+
+Этап 10 использует динамический шаблон персон и исполняемый preflight:
+
+```bash
+npm run demo:dataset
+DEMO_BASE_URL=https://rendezvous.example \
+  DEMO_REQUIRE_RELEASE_METADATA=true npm run demo:preflight
+npm run test:e2e:fixture
+```
+
+Fixture fallback всегда показывает заметную подпись, что это сохранённые
+демо-данные, а не текущие результаты Туту. Release checklist, сценарий, runbook
+и журнал репетиций находятся в [`docs/release`](docs/release/README.md).
+
+Для container deployment есть отдельные API/web images и одноразовый migration
+job. Скопируйте `.env.release.example` во внешнее хранилище конфигурации, замените
+placeholders секретами и запустите Compose с `infra/compose.release.yaml`.
+Публичный TLS завершается на ingress платформы; web-контейнер проксирует API/SSE
+внутри deployment. Hackathon topology требует ровно одну API replica — причина
+и путь к multi-replica описаны в
+[`ADR 0006`](docs/adr/0006-demo-release-topology.md).
 
 ## Структура
 

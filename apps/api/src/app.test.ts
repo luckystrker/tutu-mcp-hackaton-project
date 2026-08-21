@@ -36,6 +36,29 @@ describe("health routes", () => {
     });
   });
 
+  it("exposes safe build metadata for diagnostics", async () => {
+    const app = buildApp({
+      readinessCheck: vi.fn(),
+      buildInfo: {
+        service: "rendezvous-api",
+        version: "0.1.0",
+        commitSha: "abc1234",
+        builtAt: "2026-08-21T10:00:00.000Z",
+        environment: "production",
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/health/build" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      service: "rendezvous-api",
+      commitSha: "abc1234",
+      environment: "production",
+    });
+  });
+
   it("returns 503 when PostgreSQL is unavailable", async () => {
     const app = buildApp({
       readinessCheck: vi

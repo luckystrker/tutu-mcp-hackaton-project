@@ -1,0 +1,9 @@
+.git
+.env
+**/node_modules
+**/dist
+**/.types
+**/*.tsbuildinfo
+playwright-report
+test-results
+coverage

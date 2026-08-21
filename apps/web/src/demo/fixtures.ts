@@ -77,6 +77,8 @@ function destination(
       returnDepartureAt: `2026-09-06T${17 - routeIndex}:00:00.000Z`,
       returnArrivalAt: `2026-09-06T${20 - routeIndex}:00:00.000Z`,
       estimatedCost: { amount: 5_400 + routeIndex * 1_100, currency: "RUB" },
+      outboundBookingUrl: `https://www.tutu.ru/poezda/fixture?direction=outbound&route=${routeIndex}`,
+      returnBookingUrl: `https://www.tutu.ru/poezda/fixture?direction=return&route=${routeIndex}`,
     })),
     hotels: [
       {
@@ -87,6 +89,7 @@ function destination(
         rating: 9.1 - index * 0.3,
         checkIn: "2026-09-05",
         checkOut: "2026-09-06",
+        bookingUrl: `https://hotel.tutu.ru/checkout/fixture?hotel=${index}`,
         fetchedAt: now,
         source: "tutu",
       },

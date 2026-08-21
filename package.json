@@ -20,7 +20,11 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:fixture": "playwright test -c playwright.fixture.config.ts",
     "secrets:scan": "node tools/check-secrets.mjs",
+    "demo:dataset": "node --import tsx --conditions development tools/demo-dataset.ts",
+    "demo:preflight": "node tools/demo-preflight.mjs",
+    "demo:preflight:live": "npm run demo:preflight && TUTU_LIVE_TEST=1 npm run test:live -w @rendezvous/tutu",
     "test:watch": "vitest",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build",
     "db:migrate": "node tools/migrate.mjs"

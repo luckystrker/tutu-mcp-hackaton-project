@@ -53,6 +53,45 @@ describe("application config", () => {
     expect(() => loadConfig({ ...required, NODE_ENV: "production" })).toThrow();
   });
 
+  it("requires HTTPS provider and Mini App URLs in production", () => {
+    const production = {
+      ...required,
+      NODE_ENV: "production",
+      TELEGRAM_BOT_TOKEN: "token",
+      TELEGRAM_BOT_USERNAME: "bot",
+      TELEGRAM_MINI_APP_SHORT_NAME: "app",
+      BUILD_SHA: "abc1234",
+      BUILD_TIME: "2026-08-21T00:00:00.000Z",
+    };
+    expect(() => loadConfig(production)).toThrow(/HTTPS/);
+    expect(() =>
+      loadConfig({
+        ...production,
+        PUBLIC_MINI_APP_URL: "https://app.example",
+        TUTU_MCP_URL: "http://mcp.example/mcp",
+      }),
+    ).toThrow(/HTTPS/);
+    expect(
+      loadConfig({
+        ...production,
+        PUBLIC_MINI_APP_URL: "https://app.example",
+      }).PUBLIC_MINI_APP_URL,
+    ).toBe("https://app.example");
+  });
+
+  it("requires release build metadata in production", () => {
+    expect(() =>
+      loadConfig({
+        ...required,
+        NODE_ENV: "production",
+        PUBLIC_MINI_APP_URL: "https://app.example",
+        TELEGRAM_BOT_TOKEN: "token",
+        TELEGRAM_BOT_USERNAME: "bot",
+        TELEGRAM_MINI_APP_SHORT_NAME: "app",
+      }),
+    ).toThrow(/build SHA/);
+  });
+
   it("parses demo bots flags from environment strings", () => {
     expect(loadConfig({ ...required }).DEMO_BOTS).toBe(false);
     expect(loadConfig({ ...required, DEMO_BOTS: "false" }).DEMO_BOTS).toBe(

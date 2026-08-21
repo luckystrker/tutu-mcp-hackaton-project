@@ -6,7 +6,7 @@ const CSP_DIRECTIVES = [
   "script-src 'self' https://telegram.org",
   "style-src 'self' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' data:",
+  "img-src 'self' data: https://tile.openstreetmap.org",
   "connect-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",

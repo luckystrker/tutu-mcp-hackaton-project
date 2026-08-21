@@ -38,6 +38,11 @@ export const AppConfigSchema = z
     TELEGRAM_MINI_APP_SHORT_NAME: OptionalTextSchema,
     TUTU_MCP_URL: z.url().default("https://mcp.tutu.ru/mcp"),
     PUBLIC_MINI_APP_URL: z.url(),
+    BUILD_VERSION: OptionalTextSchema.default("0.1.0"),
+    BUILD_SHA: OptionalTextSchema.default("development"),
+    BUILD_TIME: z
+      .union([z.iso.datetime({ offset: true }), EmptyStringToUndefinedSchema])
+      .optional(),
     LLM_PROVIDER: OptionalTextSchema,
     LLM_MODEL: OptionalTextSchema,
     LLM_BASE_URL: z.union([z.url(), EmptyStringToUndefinedSchema]).optional(),
@@ -46,6 +51,36 @@ export const AppConfigSchema = z
     DEMO_BOTS_INTERVAL_MS: z.coerce.number().int().min(1_000).default(15_000),
   })
   .superRefine((config, context) => {
+    if (
+      config.NODE_ENV === "production" &&
+      (config.BUILD_SHA === "development" || !config.BUILD_TIME)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["BUILD_SHA"],
+        message: "Release build SHA and build time are required in production",
+      });
+    }
+    if (
+      config.NODE_ENV === "production" &&
+      !config.PUBLIC_MINI_APP_URL.startsWith("https://")
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["PUBLIC_MINI_APP_URL"],
+        message: "HTTPS is required in production",
+      });
+    }
+    if (
+      config.NODE_ENV === "production" &&
+      !config.TUTU_MCP_URL.startsWith("https://")
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["TUTU_MCP_URL"],
+        message: "HTTPS is required for Tutu MCP in production",
+      });
+    }
     if (config.NODE_ENV === "production" && !config.TELEGRAM_BOT_TOKEN) {
       context.addIssue({
         code: "custom",

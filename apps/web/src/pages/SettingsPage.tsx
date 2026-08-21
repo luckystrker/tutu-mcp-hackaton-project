@@ -2,6 +2,7 @@ import type { SupportedLocale } from "@rendezvous/i18n";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AppFrame } from "../components/AppFrame.js";
+import { formatDateTime } from "../lib/formatting.js";
 import { currentLocale, setLocale } from "../i18n/index.js";
 
 const OPTIONS: ReadonlyArray<{
@@ -17,6 +18,10 @@ export function SettingsPage() {
   const { t } = useTranslation();
   const [selected, setSelected] = useState(currentLocale);
   const [announcement, setAnnouncement] = useState("");
+  const buildSha = import.meta.env.VITE_BUILD_SHA || "development";
+  const buildTime = import.meta.env.VITE_BUILD_TIME
+    ? formatDateTime(import.meta.env.VITE_BUILD_TIME)
+    : "—";
 
   async function select(locale: SupportedLocale) {
     setSelected(locale);
@@ -54,6 +59,19 @@ export function SettingsPage() {
             ))}
           </div>
         </fieldset>
+        <section className="build-diagnostics" aria-labelledby="build-heading">
+          <h2 id="build-heading">{t("settings.diagnostics")}</h2>
+          <dl>
+            <div>
+              <dt>{t("settings.build")}</dt>
+              <dd>{buildSha.slice(0, 12)}</dd>
+            </div>
+            <div>
+              <dt>{t("settings.builtAt")}</dt>
+              <dd>{buildTime}</dd>
+            </div>
+          </dl>
+        </section>
         <p className="sr-only" aria-live="polite">
           {announcement}
         </p>

@@ -1,4 +1,4 @@
-import { ApiErrorSchema } from "@rendezvous/contracts";
+import { ApiErrorSchema, type BuildInfo } from "@rendezvous/contracts";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import { ZodError } from "zod";
 import { ApplicationError } from "./application/errors.js";
@@ -19,6 +19,7 @@ export type AppDependencies = {
   tripService?: TripService;
   logger?: FastifyServerOptions["logger"];
   metricsSnapshot?: () => Readonly<Record<string, unknown>>;
+  buildInfo?: BuildInfo;
   authenticator?: ActorAuthenticator;
   sessions?: SessionService;
   allowDevAuth?: boolean;
@@ -143,6 +144,7 @@ export function buildApp(dependencies: AppDependencies) {
     ...(dependencies.metricsSnapshot
       ? { metricsSnapshot: dependencies.metricsSnapshot }
       : {}),
+    ...(dependencies.buildInfo ? { buildInfo: dependencies.buildInfo } : {}),
   });
   if (dependencies.tripService)
     void app.register(tripRoutes, {
